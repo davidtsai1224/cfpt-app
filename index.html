@@ -1,87 +1,84 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>KPM 姿態偏移分析</title>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <style>
-    body { margin: 0; background: #000; color: white; font-family: sans-serif; text-align: center; }
-    .status-box { padding: 10px; background: rgba(0,0,0,0.7); position: fixed; top: 0; width: 100%; z-index: 10; }
-    #output_canvas { width: 100vw; height: 100vh; object-fit: contain; }
-    #input_video { display: none; }
-  </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>KPM 姿態分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <style>
+        body { margin: 0; background: #222; color: #0f0; font-family: monospace; overflow: hidden; }
+        #status-monitor { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 10px; z-index: 100; font-size: 12px; border: 1px solid #0f0; }
+        #output_canvas { width: 100vw; height: 100vh; object-fit: contain; }
+        #input_video { display: none; }
+        #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; font-size: 20px; background: #0f0; color: #000; border: none; border-radius: 10px; cursor: pointer; z-index: 101; }
+    </style>
 </head>
 <body>
-  <div class="status-box">
-    <div id="status">正在準備環境...</div>
-    <div id="sub-status" style="font-size: 12px; color: #ccc;">正在檢查相機與模型連線</div>
-  </div>
+    <div id="status-monitor">
+        <div>[SYSTEM STATUS]</div>
+        <div id="step1">○ 載入 AI 套件...</div>
+        <div id="step2">○ 下載模型檔案...</div>
+        <div id="step3">○ 啟動相機...</div>
+        <hr>
+        <div id="err-log" style="color: red;"></div>
+    </div>
 
-  <video id="input_video" playsinline></video>
-  <canvas id="output_canvas"></canvas>
+    <button id="start-btn">點擊開始檢測</button>
+    <video id="input_video" playsinline></video>
+    <canvas id="output_canvas"></canvas>
 
-  <script type="module">
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const statusText = document.getElementById('status');
-    const subStatusText = document.getElementById('sub-status');
+    <script type="module">
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const btn = document.getElementById('start-btn');
 
-    function onResults(results) {
-      statusText.innerText = "KPM AI 運作中";
-      subStatusText.innerText = results.poseLandmarks ? "已偵測到骨架" : "請將全身放入鏡頭中";
-      
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+        function logErr(msg) { document.getElementById('err-log').innerText += msg + "\n"; }
 
-      if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
-        drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2, radius: 5});
-      }
-      canvasCtx.restore();
-    }
+        try {
+            const pose = new Pose({locateFile: (file) => {
+                document.getElementById('step2').innerText = `● 正在下載: ${file}`;
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
+            }});
 
-    // 使用絕對版本號的路徑，避免載入錯誤
-    const pose = new Pose({locateFile: (file) => {
-      const url = `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
-      subStatusText.innerText = `載入模型組件: ${file}`;
-      return url;
-    }});
+            pose.setOptions({
+                modelComplexity: 0, // 使用最輕量級模型
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
 
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
+            pose.onResults((results) => {
+                document.getElementById('step2').innerText = "● 模型運作正常";
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+                if (results.poseLandmarks) {
+                    drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+                    drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2, radius: 5});
+                }
+                canvasCtx.restore();
+            });
 
-    pose.onResults(onResults);
+            const camera = new Camera(videoElement, {
+                onFrame: async () => { await pose.send({image: videoElement}); },
+                width: 640, height: 480
+            });
 
-    // 啟動相機
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await pose.send({image: videoElement});
-      },
-      width: 1280,
-      height: 720
-    });
+            btn.onclick = () => {
+                btn.style.display = 'none';
+                document.getElementById('step3').innerText = "● 啟動相機中...";
+                camera.start().then(() => {
+                    document.getElementById('step3').innerText = "● 相機已開啟";
+                }).catch(e => logErr("相機啟動失敗: " + e));
+            };
 
-    statusText.innerText = "請點擊畫面以啟動相機";
-    
-    // 增加點擊啟動機制，解決 iOS 自動播放限制
-    window.onclick = () => {
-        statusText.innerText = "正在啟動相機...";
-        camera.start().then(() => {
-            statusText.innerText = "相機已啟動，載入 AI 模型中...";
-        }).catch(err => {
-            statusText.innerText = "相機啟動失敗";
-            subStatusText.innerText = err;
-        });
-    };
-  </script>
+            document.getElementById('step1').innerText = "● AI 套件已載入";
+        } catch (e) {
+            logErr("初始化錯誤: " + e);
+        }
+    </script>
 </body>
 </html>

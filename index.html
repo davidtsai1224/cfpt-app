@@ -2,61 +2,58 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>KPM 姿態偏移檢測測試</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KPM 姿態偏移分析</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  
   <style>
-    body { margin: 0; display: flex; flex-direction: column; align-items: center; background: #000; color: white; font-family: sans-serif; }
-    .container { position: relative; width: 100vw; height: 80vh; }
+    body { margin: 0; background: #000; color: white; font-family: sans-serif; text-align: center; }
+    .status-box { padding: 10px; background: rgba(0,0,0,0.7); position: fixed; top: 0; width: 100%; z-index: 10; }
+    #output_canvas { width: 100vw; height: 100vh; object-fit: contain; }
     #input_video { display: none; }
-    #output_canvas { width: 100%; height: 100%; object-fit: contain; }
-    .controls { padding: 20px; }
   </style>
 </head>
-
 <body>
-  <div class="controls">
-    <h3>靜態姿態偏移 - 核心抓取測試</h3>
-    <p id="status">正在初始化 AI 模型...</p>
+  <div class="status-box">
+    <div id="status">正在準備環境...</div>
+    <div id="sub-status" style="font-size: 12px; color: #ccc;">正在檢查相機與模型連線</div>
   </div>
 
-  <div class="container">
-    <video id="input_video"></video>
-    <canvas id="output_canvas"></canvas>
-  </div>
+  <video id="input_video" playsinline></video>
+  <canvas id="output_canvas"></canvas>
 
   <script type="module">
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
     const statusText = document.getElementById('status');
+    const subStatusText = document.getElementById('sub-status');
 
     function onResults(results) {
-      statusText.innerText = results.poseLandmarks ? "偵測成功！" : "尚未偵測到人體...";
+      statusText.innerText = "KPM AI 運作中";
+      subStatusText.innerText = results.poseLandmarks ? "已偵測到骨架" : "請將全身放入鏡頭中";
       
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      
-      // 繪製影像背景
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
       if (results.poseLandmarks) {
-        // 繪製骨架連結點
         drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
-        // 繪製關鍵點
         drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2, radius: 5});
       }
       canvasCtx.restore();
     }
 
+    // 使用絕對版本號的路徑，避免載入錯誤
     const pose = new Pose({locateFile: (file) => {
-      return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+      const url = `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`;
+      subStatusText.innerText = `載入模型組件: ${file}`;
+      return url;
     }});
 
     pose.setOptions({
-      modelComplexity: 1, // iPhone 13 Pro Max 可以開到 2 (精準度更高但較吃資源)
+      modelComplexity: 1,
       smoothLandmarks: true,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5
@@ -64,6 +61,7 @@
 
     pose.onResults(onResults);
 
+    // 啟動相機
     const camera = new Camera(videoElement, {
       onFrame: async () => {
         await pose.send({image: videoElement});
@@ -71,7 +69,19 @@
       width: 1280,
       height: 720
     });
-    camera.start();
+
+    statusText.innerText = "請點擊畫面以啟動相機";
+    
+    // 增加點擊啟動機制，解決 iOS 自動播放限制
+    window.onclick = () => {
+        statusText.innerText = "正在啟動相機...";
+        camera.start().then(() => {
+            statusText.innerText = "相機已啟動，載入 AI 模型中...";
+        }).catch(err => {
+            statusText.innerText = "相機啟動失敗";
+            subStatusText.innerText = err;
+        });
+    };
   </script>
 </body>
 </html>

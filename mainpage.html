@@ -13,7 +13,6 @@
         #output_canvas { max-width: 100%; max-height: 100%; transform: scaleX(-1); }
         #input_video { display: none; }
         
-        /* 橫向置頂面板 */
         #status-monitor { 
             position: absolute; top: 0; left: 0; width: 100%; 
             background: rgba(0, 0, 0, 0.85); display: flex; 
@@ -38,9 +37,7 @@
         .bottom-line { bottom: 10%; border-top: 2px dashed rgba(100,255,100,0.4); }
         .guide-text { background: rgba(0, 0, 0, 0.6); padding: 3px 12px; font-size: 13px; color: #fff; border-radius: 5px; transform: translateY(-50%); }
         .red-dot { position: absolute; width: 12px; height: 12px; background-color: #ff0000; border-radius: 50%; box-shadow: 0 0 10px #ff0000; animation: blink 2s infinite ease-in-out; }
-        @keyframes blink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.8); } }
         
-        /* 動態風險評估文字位置：校正至 18% */
         #dynamic-risk-ui { position: absolute; bottom: 18%; width: 100%; text-align: center; color: #ff5555; font-size: 18px; font-weight: bold; z-index: 310; text-shadow: 2px 2px 4px #000; pointer-events: none; }
 
         #report-img-container img { width: 100%; border: 1px solid #fff; margin-top: 10px; }
@@ -75,11 +72,8 @@
     </div>
 
     <div id="countdown-display" class="countdown">5</div>
-    
     <div class="guide-line top-line"><div class="red-dot"></div><span class="guide-text" style="margin-top: 35px;">頭頂請對齊紅點</span></div>
-    
     <div id="dynamic-risk-ui"></div>
-    
     <div class="guide-line bottom-line"><span class="guide-text">距離偵測範圍</span></div>
 
     <div class="container">
@@ -128,8 +122,6 @@
 
             if (results.poseLandmarks && currentMode !== 'IDLE') {
                 const lms = results.poseLandmarks;
-                
-                // 肩膀座標判定
                 const markerStatus = document.getElementById('val-marker');
                 const s11 = lms[11], s12 = lms[12];
                 const checkValid = (p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 && p.visibility > 0.6;
@@ -150,10 +142,8 @@
                     currentAngle = normalizeAngle((headRad - shRad) * 180 / Math.PI);
                     label = currentAngle > 1.5 ? "向左偏移 (L)" : (currentAngle < -1.5 ? "向右偏移 (R)" : "頸部中立");
                     modeTitle = "頸肩";
-                    
                     const absA = Math.abs(currentAngle);
                     if (absA >= 7.5) riskLevel = "高"; else if (absA >= 5) riskLevel = "中"; else riskLevel = "低";
-                    
                 } else if (currentMode === 'LATERAL') {
                     const side = lms[11].visibility > lms[12].visibility ? 11 : 12;
                     const ear = (side === 11) ? 7 : 8;
@@ -164,7 +154,6 @@
                     else label = rawA > 2 ? "前傾 (Fwd)" : "後傾 (Bwd)";
                     currentAngle = rawA;
                     modeTitle = "頸胸";
-
                     const absA = Math.abs(currentAngle);
                     if (absA >= 15) riskLevel = "高"; else if (absA >= 5) riskLevel = "中"; else riskLevel = "低";
                 }
@@ -239,7 +228,15 @@
             const ctx = c.getContext('2d');
             ctx.fillStyle = "white"; ctx.fillRect(0,0,800,1200);
             ctx.fillStyle = "#004d40"; ctx.fillRect(0,0,800,110);
-            ctx.fillStyle = "white"; ctx.font = "bold 38px sans-serif"; ctx.fillText("康富物理治療檢測報告", 40, 70);
+            
+            // --- 標題更名與置中修正 ---
+            ctx.fillStyle = "white"; 
+            ctx.font = "bold 38px sans-serif"; 
+            ctx.textAlign = "center"; // 設定文字水平置中
+            ctx.fillText("康富物理治療體態檢測報告", 400, 70); // 座標改為畫布寬度的一半 (800/2)
+            
+            // 重置對齊方式以免影響後續文字
+            ctx.textAlign = "left"; 
             ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
             ctx.fillText(`個案姓名: ${reportData.name}`, 40, 160);
             ctx.fillText(`檢測序號: ${reportData.id}`, 320, 160);

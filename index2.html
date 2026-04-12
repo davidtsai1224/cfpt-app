@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>KPM 側面分析 - 壓力評估版</title>
+    <title>KPM 側面分析 - 專業壓力版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -15,14 +15,11 @@
         #input_video { display: none; }
         #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; font-size: 20px; background: #0f0; color: #000; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; z-index: 101; }
         
-        /* 參考線與文字 */
         .guide-line { position: absolute; left: 0; width: 100%; border-top: 1px dashed rgba(255, 255, 255, 0.6); z-index: 90; display: flex; justify-content: center; }
         .guide-text { background: rgba(0, 0, 0, 0.5); padding: 2px 10px; font-size: 12px; color: #fff; border-radius: 4px; transform: translateY(-50%); }
         .top-line { top: 20%; }
         .bottom-line { bottom: 10%; }
 
-        /* 風險顏色 */
-        .risk-normal { color: #55ff55; }
         .risk-low { color: #55ff55; font-weight: bold; }
         .risk-med { color: #ffff55; font-weight: bold; }
         .risk-high { color: #ff5555; font-weight: bold; }
@@ -30,7 +27,7 @@
 </head>
 <body>
     <div id="status-monitor">
-        <div style="font-weight: bold; color: #fff; letter-spacing: 1px;">KPM LATERAL ANALYSIS</div>
+        <div style="font-weight: bold; color: #fff;">KPM LATERAL ANALYSIS</div>
         <hr style="border: 0.5px solid #333; margin: 10px 0;">
         <div id="lateral-info" style="font-size: 18px; color: #00ffff; margin-bottom: 5px;">側面夾角: 偵測中...</div>
         <div id="lateral-risk" style="font-size: 16px;">風險評估: --</div>
@@ -63,14 +60,12 @@
             return buffer.reduce((a, b) => a + b, 0) / buffer.length;
         }
 
-        // 蔡老師要求的壓力風險邏輯
-        function getRiskLevel(angle, isForward) {
-            const absA = Math.abs(angle);
+        // 核心風險判定：5度/15度壓力閾值
+        function getRiskLevel(absA, isForward) {
             if (!isForward) return { label: "風險: 低 (低壓區)", class: "risk-low" };
-            
             if (absA >= 15) return { label: "風險: 高 (壓力 2-4 倍)", class: "risk-high" };
             if (absA >= 5) return { label: "風險: 中 (負擔增加)", class: "risk-med" };
-            return { label: "風險: 正常", class: "risk-normal" };
+            return { label: "風險: 正常", class: "risk-low" };
         }
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`});
@@ -98,7 +93,7 @@
                 let angle_deg = Math.atan2(dx, dy) * 180 / Math.PI;
                 const final_angle = smooth(angle_deg);
                 
-                // 判定前後邏輯
+                // --- 方向判定 (鎖定 v2.2 版邏輯) ---
                 let direction = "中立";
                 let isForward = false;
                 if (final_angle > 2) {
@@ -109,15 +104,15 @@
                     isForward = false;
                 }
 
-                latInfo.innerText = `側面夾角: ${Math.abs(final_angle).toFixed(1)}°\n${direction}`;
-                const risk = getRiskLevel(final_angle, isForward);
+                const absA = Math.abs(final_angle);
+                latInfo.innerText = `側面夾角: ${absA.toFixed(1)}°\n${direction}`;
+                
+                const risk = getRiskLevel(absA, isForward);
                 latRisk.innerText = risk.label;
                 latRisk.className = risk.class;
 
-                // 繪製骨架與基準線
                 drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 
-                // 肩部垂直線
                 canvasCtx.beginPath();
                 canvasCtx.setLineDash([5, 5]);
                 canvasCtx.moveTo(shoulder.x * canvasElement.width, 0);
@@ -125,7 +120,6 @@
                 canvasCtx.strokeStyle = 'yellow';
                 canvasCtx.stroke();
 
-                // 耳肩連線
                 canvasCtx.beginPath();
                 canvasCtx.setLineDash([]);
                 canvasCtx.moveTo(shoulder.x * canvasElement.width, shoulder.y * canvasElement.height);

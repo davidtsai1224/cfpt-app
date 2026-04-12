@@ -17,7 +17,10 @@
         h2 { color: #fff; margin: 10px 0; }
         input { background: #333; border: 1px solid #0f0; color: #fff; padding: 12px; border-radius: 8px; font-size: 18px; width: 85%; margin: 10px 0; }
         button { background: #0f0; color: #000; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 50px; cursor: pointer; margin: 5px; }
-        #status-monitor { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 15px; border: 1.5px solid #0f0; z-index: 100; min-width: 220px; }
+        
+        /* 數據面板位置調整：往下移避開頂部遮擋 */
+        #status-monitor { position: absolute; top: 60px; left: 20px; background: rgba(0,0,0,0.85); padding: 18px; border-radius: 15px; border: 1.5px solid #0f0; z-index: 100; min-width: 220px; box-shadow: 0 4px 15px rgba(0,255,0,0.2); }
+        
         .countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 150px; color: #fff; z-index: 150; pointer-events: none; display: none; }
         .guide-line { position: absolute; left: 0; width: 100%; border-top: 2px dashed rgba(255,255,255,0.6); z-index: 90; display: flex; justify-content: center; pointer-events: none; }
         .top-line { top: 20%; }
@@ -52,7 +55,7 @@
     <div id="countdown-display" class="countdown">5</div>
 
     <div id="status-monitor" style="display:none;">
-        <div id="angle-info" style="font-size: 20px; color: #ffff00; margin-bottom: 5px;">分析中...</div>
+        <div id="angle-info" style="font-size: 20px; color: #ffff00; margin-bottom: 5px; white-space: pre-line;">分析中...</div>
         <div id="marker-status" style="font-size: 14px; color: #0f0;">肩膀點位: 偵測中</div>
     </div>
 
@@ -87,7 +90,6 @@
         let currentMode = 'IDLE', isStable = false, stabilityCounter = 0, lastAngle = 0;
         let smaBuffer = [], reportData = { name: "", id: "", date: "", frontal: null, lateral: null }, finalBlob = null;
 
-        // 角度規一化函式 (解決 200-300 度跳轉問題)
         function normalizeAngle(angle) {
             while (angle > 180) angle -= 360;
             while (angle < -180) angle += 360;
@@ -156,7 +158,6 @@
             canvasCtx.restore();
         });
 
-        // 修改啟動流程：先啟動相機再切換 UI
         const camera = new Camera(videoElement, {
             onFrame: async () => { await pose.send({image: videoElement}); },
             width: 1280, height: 720
@@ -164,8 +165,7 @@
 
         window.startFlow = async () => {
             btnStart.disabled = true;
-            btnStart.innerText = "相機啟動中...";
-            
+            btnStart.innerText = "相機初始化中...";
             try {
                 await camera.start();
                 reportData.name = document.getElementById('patient-name').value;
@@ -176,9 +176,9 @@
                 document.getElementById('status-monitor').style.display = 'block';
                 currentMode = 'FRONTAL';
             } catch (err) {
-                alert("相機啟動失敗，請確保已授權相機權限並重新整理。");
+                alert("相機無法啟動，請確認是否允許相機權限。");
                 btnStart.disabled = false;
-                btnStart.innerText = "重新啟動檢測";
+                btnStart.innerText = "重新檢測";
             }
         };
 

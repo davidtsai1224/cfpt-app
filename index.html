@@ -3,25 +3,33 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>KPM 正面分析 - 原始定義版</title>
+    <title>KPM 正面分析 - 風險評估版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <style>
         body { margin: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
-        #status-monitor { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 15px; z-index: 100; font-size: 16px; border: 2px solid #0f0; border-radius: 12px; min-width: 250px; }
+        #status-monitor { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 15px; z-index: 100; font-size: 16px; border: 2px solid #0f0; border-radius: 12px; min-width: 260px; box-shadow: 0 4px 15px rgba(0,255,0,0.3); }
         .container { position: relative; flex: 1; display: flex; justify-content: center; align-items: center; background: #000; }
         #output_canvas { max-width: 100%; max-height: 100%; object-fit: contain; transform: scaleX(-1); } 
         #input_video { display: none; }
         #start-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px 40px; font-size: 20px; background: #0f0; color: #000; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; z-index: 101; }
+        .risk-tag { font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+        .risk-low { color: #55ff55; }    /* 綠色 */
+        .risk-med { color: #ffff55; }    /* 黃色 */
+        .risk-high { color: #ff5555; }   /* 紅色 */
     </style>
 </head>
 <body>
     <div id="status-monitor">
-        <div style="font-weight: bold; color: #fff;">KPM RAW DATA MODE</div>
+        <div style="font-weight: bold; color: #fff;">KPM FRONT ANALYSIS</div>
         <hr style="border: 0.5px solid #333; margin: 10px 0;">
-        <div id="shoulder-info" style="font-size: 18px; color: #ffff00; margin-bottom: 8px;">肩部: 偵測中...</div>
-        <div id="neck-info" style="font-size: 18px; color: #00ffff;">頸部: 偵測中...</div>
+        
+        <div id="shoulder-info" style="font-size: 18px; color: #ffff00; margin-bottom: 5px;">肩部: 偵測中...</div>
+        <div id="shoulder-risk" style="font-size: 14px; margin-bottom: 15px;">風險: --</div>
+
+        <div id="neck-info" style="font-size: 18px; color: #00ffff; margin-bottom: 5px;">頸部: 偵測中...</div>
+        <div id="neck-risk" style="font-size: 14px;">風險: --</div>
     </div>
 
     <button id="start-btn">開始正面測試</button>
@@ -36,8 +44,11 @@
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
         const btn = document.getElementById('start-btn');
-        const shoulderInfo = document.getElementById('shoulder-info');
-        const neckInfo = document.getElementById('neck-info');
+        
+        const shInfo = document.getElementById('shoulder-info');
+        const shRisk = document.getElementById('shoulder-risk');
+        const nkInfo = document.getElementById('neck-info');
+        const nkRisk = document.getElementById('neck-risk');
 
         const sBuffer = [], nBuffer = [];
         const B_SIZE = 10;
@@ -45,7 +56,15 @@
         function smooth(val, buffer) {
             buffer.push(val);
             if (buffer.length > B_SIZE) buffer.shift();
-            return (buffer.reduce((a, b) => a + b, 0) / buffer.length).toFixed(1);
+            return buffer.reduce((a, b) => a + b, 0) / buffer.length;
+        }
+
+        function getRiskLevel(angle) {
+            const absAngle = Math.abs(angle);
+            if (absAngle >= 10) return { label: "風險: 高 (High)", class: "risk-high" };
+            if (absAngle >= 7.5) return { label: "風險: 中 (Medium)", class: "risk-med" };
+            if (absAngle >= 5) return { label: "風險: 低 (Low)", class: "risk-low" };
+            return { label: "風險: 正常", class: "" };
         }
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`});
@@ -64,28 +83,41 @@
                 const lms = results.poseLandmarks;
                 const L_SH = lms[11], R_SH = lms[12], NOSE = lms[0];
 
-                // 1. 肩部：依照原始 Y 值判定 (Y 小為高)
-                const s_raw_angle = Math.abs(Math.atan2(-(L_SH.y - R_SH.y), L_SH.x - R_SH.x) * 180 / Math.PI);
-                const s_val = smooth(s_raw_angle, sBuffer);
+                // 1. 肩部計算
+                const s_dy = L_SH.y - R_SH.y;
+                const s_dx = L_SH.x - R_SH.x;
+                const s_angle = Math.abs(Math.atan2(-s_dy, s_dx) * 180 / Math.PI);
+                const s_val = smooth(s_angle, sBuffer);
+                
                 let s_label = "水平";
-                if (L_SH.y < R_SH.y - 0.005) s_label = "原始左側較高 (L)";
-                else if (R_SH.y < L_SH.y - 0.005) s_label = "原始右側較高 (R)";
+                if (s_dy < -0.005) s_label = "左肩較高 (Left)";
+                else if (s_dy > 0.005) s_label = "右肩較高 (Right)";
 
-                // 2. 頸部：鼻尖相對於肩中心 X 偏移
+                // 2. 頸部計算
                 const mid_x = (L_SH.x + R_SH.x) / 2;
                 const mid_y = (L_SH.y + R_SH.y) / 2;
-                const n_raw_angle = (Math.atan2(NOSE.x - mid_x, -(NOSE.y - mid_y)) * 180 / Math.PI);
-                const n_val = smooth(n_raw_angle, nBuffer);
+                const n_offset = NOSE.x - mid_x;
+                const n_angle = Math.atan2(n_offset, -(NOSE.y - mid_y)) * 180 / Math.PI;
+                const n_val = smooth(n_angle, nBuffer);
+                
                 let n_label = "中立";
-                if (parseFloat(n_val) > 1.5) n_label = "向原始右側偏移 (R)";
-                else if (parseFloat(n_val) < -1.5) n_label = "向原始左側偏移 (L)";
+                if (n_val < -1.5) n_label = "向左偏移 (Left)";
+                else if (n_val > 1.5) n_label = "向右偏移 (Right)";
 
-                // 繪製
+                // 3. 更新 UI 與風險等級
+                shInfo.innerText = `肩部: ${s_val.toFixed(1)}°\n${s_label}`;
+                const sRiskData = getRiskLevel(s_val);
+                shRisk.innerText = sRiskData.label;
+                shRisk.className = sRiskData.class;
+
+                nkInfo.innerText = `頸部: ${Math.abs(n_val).toFixed(1)}°\n${n_label}`;
+                const nRiskData = getRiskLevel(n_val);
+                nkRisk.innerText = nRiskData.label;
+                nkRisk.className = nRiskData.class;
+
+                // 4. 繪製骨架
                 drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 drawLandmarks(canvasCtx, lms, {color: '#FF0000', lineWidth: 1, radius: 4});
-                
-                shoulderInfo.innerText = `肩部: ${s_val}°\n${s_label}`;
-                neckInfo.innerText = `頸部: ${Math.abs(n_val)}°\n${n_label}`;
             }
             canvasCtx.restore();
         });

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>KPM 臨床姿態評估系統 v3.1</title>
+    <title>KPM 臨床姿態評估系統 v3.2</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -12,27 +12,18 @@
         .container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         #output_canvas { max-width: 100%; max-height: 100%; transform: scaleX(-1); }
         #input_video { display: none; }
-
-        /* UI 層級 - 彈窗設計 */
         .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.85); z-index: 200; text-align: center; padding: 20px; box-sizing: border-box; }
-        .modal { background: #1a1a1a; border: 2px solid #0f0; border-radius: 24px; padding: 35px; max-width: 450px; box-shadow: 0 0 30px rgba(0,255,0,0.4); }
-        h2 { color: #fff; margin-top: 0; letter-spacing: 1px; }
-        p { color: #bbb; line-height: 1.7; font-size: 18px; margin: 20px 0; }
-        
-        button { background: #0f0; color: #000; border: none; padding: 18px 45px; font-size: 20px; font-weight: bold; border-radius: 60px; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 15px rgba(0,255,0,0.3); }
-        button:active { transform: scale(0.95); }
-
-        /* 狀態監視器 */
+        .modal { background: #1a1a1a; border: 2px solid #0f0; border-radius: 24px; padding: 35px; max-width: 450px; }
+        h2 { color: #fff; margin-top: 0; }
+        p { color: #bbb; line-height: 1.7; font-size: 18px; }
+        button { background: #0f0; color: #000; border: none; padding: 18px 45px; font-size: 20px; font-weight: bold; border-radius: 60px; cursor: pointer; }
         #status-monitor { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 15px; border: 1.5px solid #0f0; z-index: 100; min-width: 240px; }
         #mode-title { font-weight: bold; font-size: 22px; color: #fff; margin-bottom: 12px; border-bottom: 1px solid #333; padding-bottom: 8px; }
         .countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 150px; color: #fff; font-weight: bold; text-shadow: 0 0 40px #0f0; z-index: 150; display: none; pointer-events: none; }
-
-        /* 標準化對齊線 */
         .guide-line { position: absolute; left: 0; width: 100%; border-top: 2px dashed rgba(255,255,255,0.6); z-index: 90; display: flex; justify-content: center; pointer-events: none; }
         .guide-text { background: rgba(0, 0, 0, 0.6); padding: 3px 12px; font-size: 13px; color: #fff; border-radius: 5px; transform: translateY(-50%); }
         .top-line { top: 20%; }
         .bottom-line { bottom: 10%; }
-
         .risk-tag { font-weight: bold; margin-top: 5px; }
         .risk-high { color: #ff5555; }
         .risk-med { color: #ffff55; }
@@ -44,16 +35,16 @@
     <div id="step-prepare" class="overlay">
         <div class="modal">
             <h2 style="color:#0f0">KPM 姿態評估系統</h2>
-            <p>歡迎使用專業檢測流程。<br>請確保受測者已就位。</p>
-            <button onclick="startFlow()">開始檢測流程</button>
+            <p>臨床標準化檢測流程。<br>請確保受測者已就位。</p>
+            <button onclick="startFlow()">開始檢測</button>
         </div>
     </div>
 
     <div id="step-frontal-alert" class="overlay" style="display:none;">
         <div class="modal">
             <h2>正面姿態測試</h2>
-            <p style="text-align: left;">1. 請頭部頂端對齊上方虛線。<br>2. 保持輕鬆自然姿勢，注視正前方。<br>3. 系統將在姿勢穩定後自動開始倒數。</p>
-            <button onclick="enterFrontal()">進入正面檢測</button>
+            <p style="text-align: left;">請頭部頂端對齊上方虛線。<br>保持自然姿勢，注視正前方。<br>穩定後將自動倒數。</p>
+            <button onclick="enterFrontal()">進入檢測</button>
         </div>
     </div>
 
@@ -71,11 +62,11 @@
         <div id="mode-title">--</div>
         <div id="angle-info" style="font-size: 20px; color: #ffff00; margin-bottom: 8px;">角度: --</div>
         <div id="risk-info" class="risk-tag">風險: --</div>
-        <div id="stability-info" style="font-size: 14px; color: #888; margin-top: 10px; font-family: monospace;">穩定度偵測中...</div>
+        <div id="stability-info" style="font-size: 14px; color: #888; margin-top: 10px;">穩定偵測中...</div>
     </div>
 
     <div class="guide-line top-line"><span class="guide-text">頭頂部對齊線</span></div>
-    <div class="guide-line bottom-line"><span class="guide-text">請與螢幕保持 30 公分以上距離</span></div>
+    <div class="guide-line bottom-line"><span class="guide-text">請保持 30 公分以上距離</span></div>
 
     <div class="container">
         <video id="input_video" playsinline></video>
@@ -87,15 +78,14 @@
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
         
-        let currentMode = 'IDLE'; // IDLE, FRONTAL, LATERAL
+        let currentMode = 'IDLE';
         let isStable = false;
         let stabilityCounter = 0;
         let countdownValue = 5;
         let countdownTimer = null;
         let lastAngle = 0;
-        let buffer = [];
+        let smaBuffer = []; // 移動平均緩衝
 
-        // 頁面切換邏輯
         window.startFlow = () => {
             document.getElementById('step-prepare').style.display = 'none';
             document.getElementById('step-frontal-alert').style.display = 'flex';
@@ -112,13 +102,11 @@
         function resetStability() {
             isStable = false;
             stabilityCounter = 0;
-            countdownValue = 5;
-            buffer = [];
+            smaBuffer = [];
             document.getElementById('countdown-display').style.display = 'none';
             if(countdownTimer) clearInterval(countdownTimer);
         }
 
-        // 風險計算邏輯
         function getRisk(angle, mode, isForward = true) {
             const absA = Math.abs(angle);
             if (mode === 'FRONTAL') {
@@ -127,7 +115,7 @@
                 if (absA >= 5) return { l: "風險: 低 (Low)", c: "risk-low" };
             } else {
                 if (!isForward) return { l: "風險: 低 (低壓區)", c: "risk-low" };
-                if (absA >= 15) return { l: "風險: 高 (壓力 2-4 倍)", c: "risk-high" };
+                if (absA >= 15) return { l: "風險: 高 (壓力 2-4 倍)", class: "risk-high" };
                 if (absA >= 5) return { l: "風險: 中 (負擔增加)", c: "risk-med" };
             }
             return { l: "風險: 正常", c: "risk-low" };
@@ -148,58 +136,54 @@
             if (results.poseLandmarks && currentMode !== 'IDLE') {
                 const lms = results.poseLandmarks;
                 let currentAngle = 0;
-                let directionLabel = "";
+                let label = "";
                 let isFwd = true;
 
-                // 根據模式設定穩定門檻 (側面放寬至 0.6)
-                const threshold = (currentMode === 'FRONTAL') ? 0.25 : 0.65;
-                const requiredFrames = (currentMode === 'FRONTAL') ? 30 : 45;
-
+                // --- 核心邏輯計算 ---
                 if (currentMode === 'FRONTAL') {
                     const L_SH = lms[11], R_SH = lms[12], NOSE = lms[0];
                     const sh_rad = Math.atan2(L_SH.y - R_SH.y, L_SH.x - R_SH.x);
                     const nk_rad = Math.atan2(NOSE.y - (L_SH.y + R_SH.y)/2, NOSE.x - (L_SH.x + R_SH.x)/2);
                     currentAngle = 90 + (nk_rad - sh_rad) * 180 / Math.PI;
-                    directionLabel = currentAngle > 1.5 ? "向左偏移 (L)" : (currentAngle < -1.5 ? "向右偏移 (R)" : "頸部中立");
+                    label = currentAngle > 1.5 ? "左偏 (L)" : (currentAngle < -1.5 ? "右偏 (R)" : "中立");
                 } else if (currentMode === 'LATERAL') {
                     const isFacingLeft = lms[0].x < ((lms[7].x + lms[8].x) / 2);
                     const side = lms[11].visibility > lms[12].visibility ? 11 : 12;
                     const ear = (side === 11) ? 7 : 8;
-                    const dx = lms[ear].x - lms[side].x;
-                    const dy = -(lms[ear].y - lms[side].y);
+                    const dx = lms[ear].x - lms[side].x, dy = -(lms[ear].y - lms[side].y);
                     let rawA = Math.atan2(dx, dy) * 180 / Math.PI;
-                    // 面向判斷與標籤對齊 (v2.5 版正確邏輯)
-                    if (isFacingLeft) {
-                        if (rawA < -2) { isFwd = true; directionLabel = "頭部前傾 (Fwd)"; }
-                        else { isFwd = false; directionLabel = "頭部後傾 (Bwd)"; }
-                    } else {
-                        if (rawA > 2) { isFwd = true; directionLabel = "頭部前傾 (Fwd)"; }
-                        else { isFwd = false; directionLabel = "頭部後傾 (Bwd)"; }
-                    }
+                    if (isFacingLeft) { isFwd = (rawA < -2); label = isFwd ? "前傾 (Fwd)" : "後傾 (Bwd)"; }
+                    else { isFwd = (rawA > 2); label = isFwd ? "前傾 (Fwd)" : "後傾 (Bwd)"; }
                     currentAngle = rawA;
                 }
 
-                const absA = Math.abs(currentAngle);
-                document.getElementById('angle-info').innerText = `${directionLabel}\n角度: ${absA.toFixed(1)}°`;
-                
+                // --- 移動平均平滑處理 ---
+                smaBuffer.push(currentAngle);
+                if(smaBuffer.length > 15) smaBuffer.shift();
+                const avgAngle = smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
+                const absA = Math.abs(avgAngle);
+
+                document.getElementById('angle-info').innerText = `${label}\n角度: ${absA.toFixed(1)}°`;
                 const r = getRisk(absA, currentMode, isFwd);
                 document.getElementById('risk-info').innerText = r.l;
                 document.getElementById('risk-info').className = "risk-tag " + r.c;
 
-                // 穩定度計算
-                const diff = Math.abs(currentAngle - lastAngle);
-                lastAngle = currentAngle;
+                // --- 穩定度偵測優化 ---
+                const threshold = (currentMode === 'FRONTAL') ? 0.5 : 1.2;
+                const requiredFrames = (currentMode === 'FRONTAL') ? 30 : 50;
 
-                if (diff < threshold) {
+                const delta = Math.abs(avgAngle - lastAngle);
+                if (delta < threshold) {
                     stabilityCounter++;
-                    document.getElementById('stability-info').innerText = `穩定狀態: [${stabilityCounter}/${requiredFrames}]`;
+                    document.getElementById('stability-info').innerText = `穩定鎖定中: [${stabilityCounter}/${requiredFrames}]`;
                     if (stabilityCounter >= requiredFrames && !isStable) startCountdown();
                 } else {
                     if (!isStable) {
                         stabilityCounter = 0;
-                        document.getElementById('stability-info').innerText = `穩定狀態: 等待中...`;
+                        document.getElementById('stability-info').innerText = `穩定度: 等待靜止...`;
                     }
                 }
+                lastAngle = avgAngle;
 
                 drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 drawLandmarks(canvasCtx, lms, {color: '#FF0000', lineWidth: 1, radius: 4});
@@ -213,7 +197,6 @@
             cd.style.display = 'block';
             countdownValue = 5;
             cd.innerText = countdownValue;
-
             countdownTimer = setInterval(() => {
                 countdownValue--;
                 cd.innerText = countdownValue;
@@ -228,7 +211,7 @@
         function onTestFinish() {
             if (currentMode === 'FRONTAL') {
                 currentMode = 'IDLE';
-                showNextModal("正面檢測完成", "已完成正面數據擷取，請引導受測者轉向側面。", "下一步：側面檢測", () => {
+                showNextModal("正面完成", "請引導受測者轉向側面。", "下一步：側面檢測", () => {
                     document.getElementById('step-next-alert').style.display = 'none';
                     document.getElementById('mode-title').innerText = "側面檢測模式";
                     currentMode = 'LATERAL';
@@ -236,7 +219,7 @@
                 });
             } else if (currentMode === 'LATERAL') {
                 currentMode = 'IDLE';
-                showNextModal("所有檢測完成", "已完成 KPM 標準化檢測流程，點擊發送報告。", "發送報告", () => {
+                showNextModal("檢測大功告成", "已完成所有數據擷取。", "發送報告", () => {
                     alert("發送報告功能開發中...");
                 });
             }

@@ -14,18 +14,18 @@
         #input_video { display: none; }
         
         /* UI 層級 */
-        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.9); z-index: 200; text-align: center; padding: 20px; box-sizing: border-box; }
-        .modal { background: #1a1a1a; border: 2px solid #0f0; border-radius: 24px; padding: 35px; max-width: 500px; width: 90%; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.95); z-index: 200; text-align: center; padding: 20px; box-sizing: border-box; }
+        .modal { background: #1a1a1a; border: 2px solid #0f0; border-radius: 24px; padding: 35px; max-width: 500px; width: 90%; box-shadow: 0 0 40px rgba(0,255,0,0.3); }
         h2 { color: #fff; margin-top: 0; }
-        input { background: #333; border: 1px solid #0f0; color: #fff; padding: 10px; border-radius: 8px; font-size: 18px; width: 80%; margin: 10px 0; }
-        button { background: #0f0; color: #000; border: none; padding: 15px 35px; font-size: 18px; font-weight: bold; border-radius: 50px; cursor: pointer; margin: 10px; }
+        input { background: #333; border: 1px solid #0f0; color: #fff; padding: 12px; border-radius: 8px; font-size: 18px; width: 85%; margin: 10px 0; }
+        button { background: #0f0; color: #000; border: none; padding: 15px 35px; font-size: 18px; font-weight: bold; border-radius: 50px; cursor: pointer; margin: 10px; transition: 0.2s; }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
         
-        #status-monitor { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 15px; border: 1.5px solid #0f0; z-index: 100; }
-        .countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 150px; color: #fff; z-index: 150; pointer-events: none; display: none; }
+        #status-monitor { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.85); padding: 20px; border-radius: 15px; border: 1.5px solid #0f0; z-index: 100; min-width: 220px; }
+        .countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 180px; color: #fff; font-weight: bold; text-shadow: 0 0 50px #0f0; z-index: 150; pointer-events: none; display: none; }
         
-        /* 報告預覽圖層 */
-        #report-preview-layer { display:none; background: #222; overflow-y: auto; }
-        #report-canvas { background: white; margin: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.5); display: none; }
+        /* 預覽區圖示 */
+        #report-img-container img { max-width: 100%; border-radius: 10px; border: 1px solid #444; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -33,18 +33,18 @@
     <div id="step-prepare" class="overlay">
         <div class="modal">
             <h2 style="color:#0f0">康富物理治療檢測</h2>
-            <p>請輸入患者資訊以建立報告檔名</p>
+            <p>請輸入受測者資訊</p>
             <input type="text" id="patient-name" placeholder="請輸入姓名" value="蔡忠憲">
-            <input type="text" id="patient-id" placeholder="序號 (例如: 001)" value="001">
+            <input type="text" id="patient-id" placeholder="檢測序號 (例如: 001)" value="001">
             <br>
-            <button onclick="startFlow()">進入正面檢測</button>
+            <button onclick="startFlow()">開始檢測</button>
         </div>
     </div>
 
     <div id="step-next-alert" class="overlay" style="display:none;">
         <div class="modal">
             <h2 id="next-title">檢測完成</h2>
-            <p id="next-msg"></p>
+            <p id="next-msg" style="color:#ccc; font-size: 1.2rem;"></p>
             <button id="next-btn"></button>
         </div>
     </div>
@@ -52,9 +52,9 @@
     <div id="countdown-display" class="countdown">5</div>
 
     <div id="status-monitor" style="display:none;">
-        <div style="font-weight:bold; font-size:20px; color:#0f0; margin-bottom:10px;">康富檢測中</div>
-        <div id="angle-info" style="font-size: 18px; color: #ffff00;">角度: --</div>
-        <div id="stability-info" style="font-size: 14px; color: #888;">等待穩定...</div>
+        <div style="font-weight:bold; font-size:22px; color:#0f0; border-bottom:1px solid #333; padding-bottom:10px; margin-bottom:10px;">康富檢測中</div>
+        <div id="angle-info" style="font-size: 20px; color: #ffff00; font-family: monospace;">角度: --</div>
+        <div id="stability-info" style="font-size: 14px; color: #888; margin-top:10px;">請保持靜止...</div>
     </div>
 
     <div class="container">
@@ -64,13 +64,15 @@
 
     <canvas id="report-gen-canvas" width="800" height="1200" style="display:none;"></canvas>
 
-    <div id="report-preview-layer" class="overlay">
+    <div id="report-preview-layer" class="overlay" style="display:none;">
         <div class="modal" style="max-width: 600px;">
-            <h2>檢測報告已完成</h2>
-            <div id="report-img-container"></div>
-            <button onclick="downloadReport()">直接儲存 (JPG)</button>
-            <button onclick="emailReport()">寄送到 Email</button>
-            <button onclick="location.reload()" style="background:#555; color:white;">重新檢測</button>
+            <h2 style="color:#0f0">檢測報告已準備就緒</h2>
+            <div id="report-img-container">
+                </div>
+            <p style="font-size: 14px; color: #888;">檔名：<span id="target-filename"></span></p>
+            <button id="download-btn" onclick="downloadReport()">直接儲存報告</button>
+            <button onclick="emailReport()">發送 Email 通知</button>
+            <button onclick="location.reload()" style="background:#444; color:white;">關閉</button>
         </div>
     </div>
 
@@ -85,17 +87,19 @@
         let lastAngle = 0;
         let smaBuffer = [];
         
-        // 數據存儲供報告使用
         let reportData = {
             name: "", id: "", date: "",
-            frontal: { img: null, angle: 0, label: "", risk: "" },
-            lateral: { img: null, angle: 0, label: "", risk: "" }
+            frontal: { img: null, angle: 0, label: "" },
+            lateral: { img: null, angle: 0, label: "" }
         };
 
         window.startFlow = () => {
-            reportData.name = document.getElementById('patient-name').value;
-            reportData.id = document.getElementById('patient-id').value;
-            reportData.date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+            reportData.name = document.getElementById('patient-name').value || "未命名";
+            reportData.id = document.getElementById('patient-id').value || "001";
+            const now = new Date();
+            reportData.date = now.getFullYear() + 
+                              String(now.getMonth()+1).padStart(2,'0') + 
+                              String(now.getDate()).padStart(2,'0');
             
             document.getElementById('step-prepare').style.display = 'none';
             document.getElementById('status-monitor').style.display = 'block';
@@ -140,26 +144,24 @@
                 const avgAngle = smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
                 document.getElementById('angle-info').innerText = `${label}\n角度: ${Math.abs(avgAngle).toFixed(1)}°`;
 
-                // 穩定度判定
-                const threshold = (currentMode === 'FRONTAL') ? 0.5 : 1.2;
+                const threshold = (currentMode === 'FRONTAL') ? 0.45 : 1.1;
                 if (Math.abs(avgAngle - lastAngle) < threshold) {
                     stabilityCounter++;
                     document.getElementById('stability-info').innerText = `穩定鎖定: [${stabilityCounter}/40]`;
                     if (stabilityCounter >= 40 && !isStable) {
                         isStable = true;
-                        startAutoCapture(avgAngle, label);
+                        startCountdown(avgAngle, label);
                     }
                 } else {
                     if(!isStable) stabilityCounter = 0;
                 }
                 lastAngle = avgAngle;
-
                 drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
             }
             canvasCtx.restore();
         });
 
-        function startAutoCapture(finalAngle, finalLabel) {
+        function startCountdown(finalAngle, finalLabel) {
             const cd = document.getElementById('countdown-display');
             cd.style.display = 'block';
             let timer = 5;
@@ -170,17 +172,17 @@
                 if (timer <= 0) {
                     clearInterval(itv);
                     cd.style.display = 'none';
-                    saveStepData(finalAngle, finalLabel);
+                    captureStep(finalAngle, finalLabel);
                 }
             }, 1000);
         }
 
-        function saveStepData(angle, label) {
-            const snapshot = canvasElement.toDataURL("image/jpeg", 0.8);
+        function captureStep(angle, label) {
+            const snapshot = canvasElement.toDataURL("image/jpeg", 0.85);
             if (currentMode === 'FRONTAL') {
                 reportData.frontal = { img: snapshot, angle: Math.abs(angle).toFixed(1), label: label };
                 currentMode = 'IDLE';
-                showModal("正面檢測完成", "請轉向側面進行檢測。", "進入側面檢測", () => {
+                showModal("正面檢測完成", "請引導受測者轉向「側面」繼續。", "進入側面檢測", () => {
                     document.getElementById('step-next-alert').style.display = 'none';
                     currentMode = 'LATERAL';
                     stabilityCounter = 0; isStable = false;
@@ -188,63 +190,79 @@
             } else {
                 reportData.lateral = { img: snapshot, angle: Math.abs(angle).toFixed(1), label: label };
                 currentMode = 'IDLE';
-                generateFinalReport();
+                document.getElementById('status-monitor').style.display = 'none';
+                generateReport();
             }
         }
 
-        function generateFinalReport() {
+        async function generateReport() {
             const c = document.getElementById('report-gen-canvas');
             const ctx = c.getContext('2d');
             
+            // 背景與 Header
             ctx.fillStyle = "white"; ctx.fillRect(0,0,800,1200);
+            ctx.fillStyle = "#004d40"; ctx.fillRect(0,0,800,110);
+            ctx.fillStyle = "white"; ctx.font = "bold 40px sans-serif";
+            ctx.fillText("康富物理治療檢測報告", 40, 70);
             
-            // Header
-            ctx.fillStyle = "#004d40"; ctx.fillRect(0,0,800,100);
-            ctx.fillStyle = "white"; ctx.font = "bold 36px sans-serif";
-            ctx.fillText("康富物理治療檢測報告", 40, 65);
-            
-            // Info
-            ctx.fillStyle = "#333"; ctx.font = "20px sans-serif";
-            ctx.fillText(`受測者: ${reportData.name}`, 40, 150);
-            ctx.fillText(`檢測序號: ${reportData.id}`, 300, 150);
-            ctx.fillText(`日期: ${reportData.date}`, 550, 150);
-            
-            // 繪製圖片與數據 (正面)
-            const imgF = new Image();
-            imgF.onload = () => {
-                ctx.drawImage(imgF, 40, 200, 340, 450);
-                ctx.strokeStyle = "#0f0"; ctx.strokeRect(40, 200, 340, 450);
-                ctx.fillText("【正面姿態】", 40, 680);
-                ctx.fillText(`偏移: ${reportData.frontal.label} / 角度: ${reportData.frontal.angle}°`, 40, 710);
-                
-                const imgL = new Image();
-                imgL.onload = () => {
-                    ctx.drawImage(imgL, 420, 200, 340, 450);
-                    ctx.strokeStyle = "#0f0"; ctx.strokeRect(420, 200, 340, 450);
-                    ctx.fillText("【側面姿態】", 420, 680);
-                    ctx.fillText(`狀態: ${reportData.lateral.label} / 角度: ${reportData.lateral.angle}°`, 420, 710);
-                    
-                    // 頁尾
-                    ctx.font = "italic 16px sans-serif";
-                    ctx.fillText("本檢測由 KPM 快速靜態姿勢評估系統生成，僅供物理治療評估參考。", 40, 1150);
-                    
-                    document.getElementById('report-preview-layer').style.display = 'flex';
-                };
-                imgL.src = reportData.lateral.img;
-            };
-            imgF.src = reportData.frontal.img;
+            // 患者資訊
+            ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
+            ctx.fillText(`受測者: ${reportData.name}`, 40, 160);
+            ctx.fillText(`檢測序號: ${reportData.id}`, 320, 160);
+            ctx.fillText(`日期: ${reportData.date}`, 580, 160);
+            ctx.strokeStyle = "#eee"; ctx.beginPath(); ctx.moveTo(40, 180); ctx.lineTo(760, 180); ctx.stroke();
+
+            // 輔助載入圖片函式
+            const loadImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = src; });
+
+            const imgF = await loadImg(reportData.frontal.img);
+            ctx.drawImage(imgF, 40, 210, 350, 480);
+            ctx.fillStyle = "#004d40"; ctx.font = "bold 24px sans-serif";
+            ctx.fillText("【正面檢測結果】", 40, 730);
+            ctx.fillStyle = "#555"; ctx.font = "20px sans-serif";
+            ctx.fillText(`偏移方向: ${reportData.frontal.label}`, 40, 765);
+            ctx.fillText(`頸部夾角: ${reportData.frontal.angle}°`, 40, 795);
+
+            const imgL = await loadImg(reportData.lateral.img);
+            ctx.drawImage(imgL, 410, 210, 350, 480);
+            ctx.fillStyle = "#004d40"; ctx.fillText("【側面檢測結果】", 410, 730);
+            ctx.fillStyle = "#555"; ctx.fillText(`姿態判斷: ${reportData.lateral.label}`, 410, 765);
+            ctx.fillText(`耳肩夾角: ${reportData.lateral.angle}°`, 410, 795);
+
+            // 頁尾
+            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif";
+            ctx.fillText("本檢測報告由 KPM 系統自動生成。康富物理治療體系 版權所有。", 40, 1160);
+
+            // 顯示預覽
+            const finalJPG = c.toDataURL("image/jpeg", 0.9);
+            const previewImg = document.createElement('img');
+            previewImg.src = finalJPG;
+            document.getElementById('report-img-container').innerHTML = '';
+            document.getElementById('report-img-container').appendChild(previewImg);
+            document.getElementById('target-filename').innerText = `${reportData.date}-${reportData.name}-${reportData.id}.jpg`;
+            document.getElementById('report-preview-layer').style.display = 'flex';
         }
 
+        // 關鍵下載修復：使用 Blob 下載
         window.downloadReport = () => {
-            const link = document.createElement('a');
-            link.download = `${reportData.date}-${reportData.name}-${reportData.id}.jpg`;
-            link.href = document.getElementById('report-gen-canvas').toDataURL("image/jpeg", 0.9);
-            link.click();
+            const canvas = document.getElementById('report-gen-canvas');
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${reportData.date}-${reportData.name}-${reportData.id}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+            }, 'image/jpeg', 0.95);
         };
 
         window.emailReport = () => {
             const subject = encodeURIComponent("康富物理治療-快速靜態姿勢評估報告");
-            const body = encodeURIComponent(`您好，這是 ${reportData.name} 的檢測結果。\n日期: ${reportData.date}\n正面角度: ${reportData.frontal.angle}\n側面角度: ${reportData.lateral.angle}\n請查收附件（請自行附上儲存的圖片）。`);
+            const body = encodeURIComponent(`您好，這是 ${reportData.name} 的檢測結果。\n日期: ${reportData.date}\n正面角度: ${reportData.frontal.angle}° (${reportData.frontal.label})\n側面角度: ${reportData.lateral.angle}° (${reportData.lateral.label})\n\n報告圖片請見附件（請在寄送前夾帶剛儲存的圖片）。`);
             window.location.href = `mailto:?subject=${subject}&body=${body}`;
         };
 

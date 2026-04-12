@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>KPM 側面分析 - 專業壓力版</title>
+    <title>KPM 側面分析 - 雙向修正版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -29,6 +29,7 @@
     <div id="status-monitor">
         <div style="font-weight: bold; color: #fff;">KPM LATERAL ANALYSIS</div>
         <hr style="border: 0.5px solid #333; margin: 10px 0;">
+        <div id="side-detected" style="font-size: 12px; color: #888; margin-bottom: 5px;">偵測方向: --</div>
         <div id="lateral-info" style="font-size: 18px; color: #00ffff; margin-bottom: 5px;">側面夾角: 偵測中...</div>
         <div id="lateral-risk" style="font-size: 16px;">風險評估: --</div>
     </div>
@@ -50,6 +51,7 @@
         const btn = document.getElementById('start-btn');
         const latInfo = document.getElementById('lateral-info');
         const latRisk = document.getElementById('lateral-risk');
+        const sideText = document.getElementById('side-detected');
 
         const buffer = [];
         const B_SIZE = 12;
@@ -60,7 +62,6 @@
             return buffer.reduce((a, b) => a + b, 0) / buffer.length;
         }
 
-        // 核心風險判定：5度/15度壓力閾值
         function getRiskLevel(absA, isForward) {
             if (!isForward) return { label: "風險: 低 (低壓區)", class: "risk-low" };
             if (absA >= 15) return { label: "風險: 高 (壓力 2-4 倍)", class: "risk-high" };
@@ -82,26 +83,36 @@
 
             if (results.poseLandmarks) {
                 const lms = results.poseLandmarks;
+                
+                // 1. 判斷受測者面向 (依據鼻子與耳朵的相對位置)
+                // 如果鼻子(0)的X比耳朵(7/8)更小，代表面向左邊
+                const isFacingLeft = lms[0].x < ((lms[7].x + lms[8].x) / 2);
+                sideText.innerText = `偵測方向: ${isFacingLeft ? "面向左側" : "面向右側"}`;
+
+                // 2. 選擇較清楚的一側進行測量
                 const isLeftVisible = lms[11].visibility > lms[12].visibility;
-                const sideIdx = isLeftVisible ? 11 : 12;
-                const earIdx = isLeftVisible ? 7 : 8;
-                const ear = lms[earIdx];
-                const shoulder = lms[sideIdx];
+                const sIdx = isLeftVisible ? 11 : 12;
+                const eIdx = isLeftVisible ? 7 : 8;
+                const ear = lms[eIdx];
+                const shoulder = lms[sIdx];
 
                 const dx = ear.x - shoulder.x;
                 const dy = -(ear.y - shoulder.y);
                 let angle_deg = Math.atan2(dx, dy) * 180 / Math.PI;
                 const final_angle = smooth(angle_deg);
                 
-                // --- 方向判定 (鎖定 v2.2 版邏輯) ---
+                // 3. 雙向自動邏輯修正
                 let direction = "中立";
                 let isForward = false;
-                if (final_angle > 2) {
-                    direction = "頭部前傾 (Forward)";
-                    isForward = true;
-                } else if (final_angle < -2) {
-                    direction = "頭部後傾 (Backward)";
-                    isForward = false;
+
+                if (isFacingLeft) {
+                    // 面向左時，耳部 X 比肩部 X 更小 (final_angle < -2) 代表前傾
+                    if (final_angle < -2) { isForward = true; direction = "頭部前傾 (Forward)"; }
+                    else if (final_angle > 2) { isForward = false; direction = "頭部後傾 (Backward)"; }
+                } else {
+                    // 面向右時，耳部 X 比肩部 X 更大 (final_angle > 2) 代表前傾
+                    if (final_angle > 2) { isForward = true; direction = "頭部前傾 (Forward)"; }
+                    else if (final_angle < -2) { isForward = false; direction = "頭部後傾 (Backward)"; }
                 }
 
                 const absA = Math.abs(final_angle);
@@ -111,8 +122,10 @@
                 latRisk.innerText = risk.label;
                 latRisk.className = risk.class;
 
+                // 繪製
                 drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 
+                // 肩部垂直線
                 canvasCtx.beginPath();
                 canvasCtx.setLineDash([5, 5]);
                 canvasCtx.moveTo(shoulder.x * canvasElement.width, 0);
@@ -120,6 +133,7 @@
                 canvasCtx.strokeStyle = 'yellow';
                 canvasCtx.stroke();
 
+                // 耳肩連線
                 canvasCtx.beginPath();
                 canvasCtx.setLineDash([]);
                 canvasCtx.moveTo(shoulder.x * canvasElement.width, shoulder.y * canvasElement.height);

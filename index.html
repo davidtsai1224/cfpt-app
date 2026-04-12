@@ -3,13 +3,13 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>KPM 正面姿態評估</title>
+    <title>KPM 正面分析 - 原始定義版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <style>
         body { margin: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
-        #status-monitor { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 15px; z-index: 100; font-size: 16px; border: 2px solid #0f0; border-radius: 12px; min-width: 250px; box-shadow: 0 4px 15px rgba(0,255,0,0.3); }
+        #status-monitor { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 15px; z-index: 100; font-size: 16px; border: 2px solid #0f0; border-radius: 12px; min-width: 250px; }
         .container { position: relative; flex: 1; display: flex; justify-content: center; align-items: center; background: #000; }
         #output_canvas { max-width: 100%; max-height: 100%; object-fit: contain; transform: scaleX(-1); } 
         #input_video { display: none; }
@@ -18,10 +18,10 @@
 </head>
 <body>
     <div id="status-monitor">
-        <div style="font-weight: bold; color: #fff;">KPM FRONT ANALYSIS</div>
+        <div style="font-weight: bold; color: #fff;">KPM RAW DATA MODE</div>
         <hr style="border: 0.5px solid #333; margin: 10px 0;">
-        <div id="shoulder-info" style="font-size: 18px; color: #ffff00; margin-bottom: 8px;">肩部: 計算中...</div>
-        <div id="neck-info" style="font-size: 18px; color: #00ffff;">頸部: 計算中...</div>
+        <div id="shoulder-info" style="font-size: 18px; color: #ffff00; margin-bottom: 8px;">肩部: 偵測中...</div>
+        <div id="neck-info" style="font-size: 18px; color: #00ffff;">頸部: 偵測中...</div>
     </div>
 
     <button id="start-btn">開始正面測試</button>
@@ -39,9 +39,7 @@
         const shoulderInfo = document.getElementById('shoulder-info');
         const neckInfo = document.getElementById('neck-info');
 
-        // 穩定器緩衝
-        const shoulderBuffer = [];
-        const neckBuffer = [];
+        const sBuffer = [], nBuffer = [];
         const B_SIZE = 10;
 
         function smooth(val, buffer) {
@@ -58,7 +56,6 @@
                 canvasElement.width = results.image.width;
                 canvasElement.height = results.image.height;
             }
-
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
@@ -67,35 +64,28 @@
                 const lms = results.poseLandmarks;
                 const L_SH = lms[11], R_SH = lms[12], NOSE = lms[0];
 
-                // 1. 肩部角度計算 (Raw Data 邏輯)
-                const s_dy = -(L_SH.y - R_SH.y), s_dx = L_SH.x - R_SH.x;
-                const s_angle = Math.abs(Math.atan2(s_dy, s_dx) * 180 / Math.PI);
-                const s_final = smooth(s_angle, shoulderBuffer);
-                let s_side = L_SH.y < R_SH.y - 0.003 ? "左肩高" : (R_SH.y < L_SH.y - 0.003 ? "右肩高" : "水平");
+                // 1. 肩部：依照原始 Y 值判定 (Y 小為高)
+                const s_raw_angle = Math.abs(Math.atan2(-(L_SH.y - R_SH.y), L_SH.x - R_SH.x) * 180 / Math.PI);
+                const s_val = smooth(s_raw_angle, sBuffer);
+                let s_label = "水平";
+                if (L_SH.y < R_SH.y - 0.005) s_label = "原始左側較高 (L)";
+                else if (R_SH.y < L_SH.y - 0.005) s_label = "原始右側較高 (R)";
 
-                // 2. 頸部夾角計算 (鼻尖相對於兩肩中心)
-                const mid_sh_x = (L_SH.x + R_SH.x) / 2;
-                const mid_sh_y = (L_SH.y + R_SH.y) / 2;
-                const n_dx = NOSE.x - mid_sh_x;
-                const n_dy = -(NOSE.y - mid_sh_y); // 垂直向量
-                const n_angle = (Math.atan2(n_dx, n_dy) * 180 / Math.PI).toFixed(1);
-                const n_final = smooth(parseFloat(n_angle), neckBuffer);
-                let n_side = n_final > 1.5 ? "頭部向右偏移" : (n_final < -1.5 ? "頭部向左偏移" : "頸部中立");
+                // 2. 頸部：鼻尖相對於肩中心 X 偏移
+                const mid_x = (L_SH.x + R_SH.x) / 2;
+                const mid_y = (L_SH.y + R_SH.y) / 2;
+                const n_raw_angle = (Math.atan2(NOSE.x - mid_x, -(NOSE.y - mid_y)) * 180 / Math.PI);
+                const n_val = smooth(n_raw_angle, nBuffer);
+                let n_label = "中立";
+                if (parseFloat(n_val) > 1.5) n_label = "向原始右側偏移 (R)";
+                else if (parseFloat(n_val) < -1.5) n_label = "向原始左側偏移 (L)";
 
-                // 3. 繪製
+                // 繪製
                 drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                 drawLandmarks(canvasCtx, lms, {color: '#FF0000', lineWidth: 1, radius: 4});
                 
-                // 頸部連線視覺化
-                canvasCtx.beginPath();
-                canvasCtx.moveTo(mid_sh_x * canvasElement.width, mid_sh_y * canvasElement.height);
-                canvasCtx.lineTo(NOSE.x * canvasElement.width, NOSE.y * canvasElement.height);
-                canvasCtx.strokeStyle = 'cyan';
-                canvasCtx.lineWidth = 3;
-                canvasCtx.stroke();
-
-                shoulderInfo.innerText = `肩部: ${s_final}° (${s_side})`;
-                neckInfo.innerText = `頸部: ${Math.abs(n_final)}° (${n_side})`;
+                shoulderInfo.innerText = `肩部: ${s_val}°\n${s_label}`;
+                neckInfo.innerText = `頸部: ${Math.abs(n_val)}°\n${n_label}`;
             }
             canvasCtx.restore();
         });

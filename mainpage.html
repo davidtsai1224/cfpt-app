@@ -113,21 +113,24 @@
         let devicePitch = 90, smaBuffer = [], rotBuffer = [];
         let reportData = { name: "", id: "", height: 170, date: "", frontal: null, lateral: null }, finalBlob = null;
 
-        function calculateClinicalAngle(p1, p2, mode) {
+        // --- 核心運算：v5.9 全空間 3D 向量運算法 ---
+        function calculateClinicalAngle(p1, p2) {
             const aspect = 1280 / 720;
             const pitchRad = (devicePitch - 90) * Math.PI / 180;
+
+            // 1. 旋轉補償與座標正規化
             const y1_c = p1.y * Math.cos(pitchRad) - p1.z * Math.sin(pitchRad);
             const y2_c = p2.y * Math.cos(pitchRad) - p2.z * Math.sin(pitchRad);
+
             const dx = (p1.x - p2.x) * aspect;
             const dy = y1_c - y2_c;
             const dz = (p1.z - p2.z);
-            let angle = 0;
-            if (mode === 'FRONTAL') {
-                angle = Math.atan2(Math.abs(dx), Math.abs(dy)) * 180 / Math.PI;
-            } else {
-                angle = Math.atan2(Math.abs(dz), Math.abs(dy)) * 180 / Math.PI;
-            }
-            return angle;
+
+            // 2. 關鍵修正：計算總水平偏移量 (不論正面側面都適用)
+            const horizontalShift = Math.sqrt(dx * dx + dz * dz);
+            
+            // 3. 計算與垂直 Y 軸的夾角
+            return Math.atan2(horizontalShift, Math.abs(dy)) * 180 / Math.PI;
         }
 
         window.requestSensor = async () => {
@@ -173,18 +176,18 @@
 
                 const shoulderWidth = Math.abs(lms[11].x - lms[12].x);
                 const rawRot = Math.abs(lms[11].z - lms[12].z);
-                const isRotating = rawRot > (shoulderWidth * 0.3);
+                const isRotating = rawRot > (shoulderWidth * 0.35); // 稍微放寬旋轉門檻
                 document.getElementById('val-rotation').innerText = isRotating ? "⚠️ 旋轉" : "正常";
                 document.getElementById('val-rotation').style.color = isRotating ? "#ff5555" : "#0f0";
 
                 let currentAngle = 0, riskL = "";
                 if (currentMode === 'FRONTAL') {
                     const shoulderMid = {x:(lms[11].x+lms[12].x)/2, y:(lms[11].y+lms[12].y)/2, z:(lms[11].z+lms[12].z)/2};
-                    currentAngle = calculateClinicalAngle(lms[0], shoulderMid, 'FRONTAL');
+                    currentAngle = calculateClinicalAngle(lms[0], shoulderMid);
                     if (currentAngle >= 7.5) riskL = "高"; else if (currentAngle >= 5) riskL = "中"; else riskL = "低";
                 } else if (currentMode === 'LATERAL') {
                     const side = lms[11].visibility > lms[12].visibility ? 11 : 12;
-                    currentAngle = calculateClinicalAngle(lms[side === 11 ? 7 : 8], lms[side], 'LATERAL');
+                    currentAngle = calculateClinicalAngle(lms[side === 11 ? 7 : 8], lms[side]);
                     if (currentAngle >= 15) riskL = "高"; else if (currentAngle >= 5) riskL = "中"; else riskL = "低";
                 }
 
@@ -279,7 +282,7 @@
             ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
             ctx.fillText(`量測角度: ${reportData.lateral.angle}° (${reportData.lateral.risk}風險)`, 420, 775);
             
-            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif"; ctx.fillText("本檢測由 KPM 5.8 全流程空間座標版生成。", 40, 1160);
+            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif"; ctx.fillText("本檢測由 KPM 5.9 真 ‧ 3D 空間精度版生成。", 40, 1160);
 
             const finalDataUrl = c.toDataURL("image/jpeg", 0.9);
             const reportImg = new Image(); reportImg.src = finalDataUrl;

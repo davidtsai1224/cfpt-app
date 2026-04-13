@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>康富物理治療體態檢測系統 v5.5</title>
+    <title>康富物理治療體態檢測系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -37,6 +37,8 @@
         
         #leveler-box { margin: 15px 0; padding: 12px; border: 1px solid #444; border-radius: 15px; background: #000; }
         #dynamic-risk-ui { position: absolute; bottom: 18%; width: 100%; text-align: center; color: #ff5555; font-size: 18px; font-weight: bold; z-index: 310; text-shadow: 2px 2px 4px #000; pointer-events: none; }
+
+        .countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 150px; color: #fff; z-index: 150; pointer-events: none; display: none; }
     </style>
 </head>
 <body>
@@ -60,12 +62,13 @@
 
     <div id="status-monitor" style="display:none;">
         <div class="status-item"><div class="status-label">模式</div><div id="val-mode" class="status-value">---</div></div>
-        <div class="status-item"><div class="status-label">真 3D 角度</div><div id="val-angle" class="status-value">0.0°</div></div>
-        <div class="status-item"><div class="status-label">旋轉預警</div><div id="val-rotation" class="status-value">正常</div></div>
-        <div class="status-item"><div class="status-label">肩膀狀態</div><div id="val-marker" class="status-value">偵測中</div></div>
+        <div class="status-item"><div class="status-label">3D 角度</div><div id="val-angle" class="status-value">0.0°</div></div>
+        <div class="status-item"><div class="status-label">旋轉狀態</div><div id="val-rotation" class="status-value">正常</div></div>
+        <div class="status-item"><div class="status-label">點位狀態</div><div id="val-marker" class="status-value">偵測中</div></div>
     </div>
 
     <div id="dynamic-risk-ui"></div>
+    <div id="countdown-display" class="countdown">5</div>
 
     <div class="container">
         <video id="input_video" playsinline></video>
@@ -79,45 +82,20 @@
         const btnStart = document.getElementById('btn-start');
         
         let currentMode = 'IDLE', isStable = false, stabilityCounter = 0, lastAngle = 0;
-        let devicePitch = 90; 
-        let smaBuffer = [];
+        let devicePitch = 90, smaBuffer = [], rotBuffer = [];
 
-        // --- 真 3D 運算引擎 ---
         function calculateTrue3DAngle(p1, p2) {
             const aspect = 1280 / 720;
             const pitchRad = (devicePitch - 90) * Math.PI / 180;
-
-            // 1. 空間座標旋轉補償 (Rotation Matrix on X-Axis)
-            // 將 MediaPipe 的點位旋轉，補償手機的俯仰角，建立絕對垂直座標系
-            const rotatePoint = (p) => {
-                const y = p.y;
-                const z = p.z;
-                return {
-                    x: p.x * aspect, // 修正長寬比
-                    y: y * Math.cos(pitchRad) - z * Math.sin(pitchRad),
-                    z: y * Math.sin(pitchRad) + z * Math.cos(pitchRad)
-                };
-            };
-
-            const pt1 = rotatePoint(p1);
-            const pt2 = rotatePoint(p2);
-
-            // 2. 空間向量計算
-            const dx = pt1.x - pt2.x;
-            const dy = pt1.y - pt2.y;
-            const dz = pt1.z - pt2.z;
-
-            // 3. 計算旋轉度 (左右深度的偏差)
-            const rotationOffset = Math.abs(dz); 
-            document.getElementById('val-rotation').innerText = rotationOffset > 0.1 ? "⚠️ 旋轉" : "正常";
-            document.getElementById('val-rotation').style.color = rotationOffset > 0.1 ? "#ff5555" : "#0f0";
-
-            // 4. 計算 3D 空間向量相對於絕對垂直線 (0, 1, 0) 的夾角
-            // 利用空間向量餘弦：Angle = arccos( |dy| / sqrt(dx^2 + dy^2 + dz^2) )
+            const rotate = (p) => ({
+                x: p.x * aspect,
+                y: p.y * Math.cos(pitchRad) - p.z * Math.sin(pitchRad),
+                z: p.y * Math.sin(pitchRad) + p.z * Math.cos(pitchRad)
+            });
+            const pt1 = rotate(p1), pt2 = rotate(p2);
+            const dx = pt1.x - pt2.x, dy = pt1.y - pt2.y, dz = pt1.z - pt2.z;
             const mag = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            if (mag === 0) return 0;
-            
-            return Math.acos(Math.abs(dy) / mag) * 180 / Math.PI;
+            return (mag === 0) ? 0 : Math.acos(Math.abs(dy) / mag) * 180 / Math.PI;
         }
 
         window.requestSensor = async () => {
@@ -128,19 +106,18 @@
         };
 
         function setupOrientation() {
-            window.addEventListener('deviceorientation', (event) => {
-                devicePitch = event.beta;
+            window.addEventListener('deviceorientation', (e) => {
+                devicePitch = e.beta;
                 document.getElementById('pitch-val').innerText = devicePitch.toFixed(1);
                 const status = document.getElementById('pitch-status');
-                if (Math.abs(devicePitch - 90) < 3) {
-                    status.innerText = "✅ 設備已垂直"; status.style.color = "#0f0";
+                if (Math.abs(devicePitch - 90) < 5) {
+                    status.innerText = "✅ 設備就緒"; status.style.color = "#0f0";
                     btnStart.disabled = false; btnStart.className = "btn-start-active";
                 } else {
                     status.innerText = "⚠️ 請微調垂直度"; status.style.color = "#ff5555";
                     btnStart.disabled = true; btnStart.className = "btn-start-inactive";
                 }
             });
-            document.getElementById('btn-sensor').innerText = "✅ 感測器授權完成";
         }
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`});
@@ -157,14 +134,25 @@
 
             if (results.poseLandmarks && currentMode !== 'IDLE') {
                 const lms = results.poseLandmarks;
-                const checkValid = (p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 && p.visibility > 0.6;
-                const isShouldersInFrame = checkValid(lms[11]) && checkValid(lms[12]);
+                const checkIn = (p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 && p.visibility > 0.6;
+                const isShouldersInFrame = checkIn(lms[11]) && checkIn(lms[12]);
                 document.getElementById('val-marker').innerText = isShouldersInFrame ? "✅ 正常" : "❌ 遺失";
+
+                // 旋轉判定優化
+                const shoulderWidth = Math.abs(lms[11].x - lms[12].x);
+                const rawRot = Math.abs(lms[11].z - lms[12].z);
+                rotBuffer.push(rawRot); if(rotBuffer.length > 20) rotBuffer.shift();
+                const avgRot = rotBuffer.reduce((a,b)=>a+b,0) / rotBuffer.length;
+                
+                // 動態門檻：如果深度差超過肩寬的 30% 才報警
+                const isRotating = avgRot > (shoulderWidth * 0.3);
+                const rotUI = document.getElementById('val-rotation');
+                rotUI.innerText = isRotating ? "⚠️ 旋轉" : "正常";
+                rotUI.style.color = isRotating ? "#ff5555" : "#0f0";
 
                 let currentAngle = 0, riskL = "";
                 if (currentMode === 'FRONTAL') {
-                    const shoulderMid = {x:(lms[11].x+lms[12].x)/2, y:(lms[11].y+lms[12].y)/2, z:(lms[11].z+lms[12].z)/2};
-                    currentAngle = calculateTrue3DAngle(lms[0], shoulderMid);
+                    currentAngle = calculateTrue3DAngle(lms[0], {x:(lms[11].x+lms[12].x)/2, y:(lms[11].y+lms[12].y)/2, z:(lms[11].z+lms[12].z)/2});
                     if (currentAngle >= 7.5) riskL = "高"; else if (currentAngle >= 5) riskL = "中"; else riskL = "低";
                 } else if (currentMode === 'LATERAL') {
                     const side = lms[11].visibility > lms[12].visibility ? 11 : 12;
@@ -172,21 +160,19 @@
                     if (currentAngle >= 15) riskL = "高"; else if (currentAngle >= 5) riskL = "中"; else riskL = "低";
                 }
 
-                smaBuffer.push(currentAngle);
-                if(smaBuffer.length > 40) smaBuffer.shift(); 
-                const avgAngle = smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
+                smaBuffer.push(currentAngle); if(smaBuffer.length > 40) smaBuffer.shift();
+                const avgAngle = smaBuffer.reduce((a,b)=>a+b,0) / smaBuffer.length;
                 
                 document.getElementById('val-mode').innerText = currentMode==='FRONTAL'?'頸肩':'頸胸';
                 document.getElementById('val-angle').innerText = `${avgAngle.toFixed(1)}°`;
                 document.getElementById('dynamic-risk-ui').innerText = `風險評估：${riskL}`;
 
-                if (isShouldersInFrame) {
-                    // 只有在穩定且沒有嚴重旋轉的情況下才倒數
-                    const rotationVal = Math.abs(lms[11].z - lms[12].z);
-                    if (Math.abs(avgAngle - lastAngle) < 0.6 && rotationVal < 0.15) {
+                if (isShouldersInFrame && !isStable) {
+                    // 穩定度判定放寬，且不再受旋轉預警強制鎖死
+                    if (Math.abs(avgAngle - lastAngle) < 0.8) {
                         stabilityCounter++;
-                        if (stabilityCounter >= 45 && !isStable) { isStable = true; alert("數據鎖定，正在擷取..."); }
-                    } else { if(!isStable) stabilityCounter = 0; }
+                        if (stabilityCounter >= 45) { isStable = true; startCountdown(); }
+                    } else { stabilityCounter = 0; }
                 }
                 lastAngle = avgAngle;
                 drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
@@ -194,13 +180,23 @@
             canvasCtx.restore();
         });
 
-        window.startFlow = async () => {
+        window.startFlow = () => {
             document.getElementById('step-prepare').style.display = 'none';
             document.getElementById('status-monitor').style.display = 'flex';
             currentMode = 'FRONTAL';
             const camera = new Camera(videoElement, {onFrame: async () => { await pose.send({image: videoElement}); }, width: 1280, height: 720});
             camera.start();
         };
+
+        function startCountdown() {
+            const cd = document.getElementById('countdown-display');
+            cd.style.display = 'block';
+            let timer = 5; cd.innerText = timer;
+            let itv = setInterval(() => {
+                timer--; cd.innerText = timer;
+                if (timer <= 0) { clearInterval(itv); cd.style.display = 'none'; alert("數據鎖定，請手動截圖或等待下一步。"); }
+            }, 1000);
+        }
     </script>
 </body>
 </html>

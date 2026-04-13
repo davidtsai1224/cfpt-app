@@ -13,7 +13,6 @@
         #output_canvas { max-width: 100%; max-height: 100%; transform: scaleX(-1); }
         #input_video { display: none; }
         
-        /* 橫向置頂面板 */
         #status-monitor { 
             position: absolute; top: 0; left: 0; width: 100%; 
             background: rgba(0, 0, 0, 0.85); display: flex; 
@@ -40,7 +39,11 @@
         #dynamic-risk-ui { position: absolute; bottom: 18%; width: 100%; text-align: center; color: #ff5555; font-size: 18px; font-weight: bold; z-index: 310; text-shadow: 2px 2px 4px #000; pointer-events: none; }
         .countdown { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 150px; color: #fff; z-index: 150; pointer-events: none; display: none; }
 
-        /* v4.9.12 置中樣式 */
+        .guide-line { position: absolute; left: 0; width: 100%; border-top: 2px dashed rgba(255,255,255,0.4); z-index: 90; display: flex; justify-content: center; pointer-events: none; }
+        .top-line { top: 20%; }
+        .bottom-line { bottom: 10%; border-top: 2px dashed rgba(100,255,100,0.4); }
+        .red-dot { position: absolute; width: 12px; height: 12px; background-color: #ff0000; border-radius: 50%; box-shadow: 0 0 10px #ff0000; animation: blink 2s infinite ease-in-out; }
+
         #report-img-container img { width: 100%; border: 1px solid #fff; margin-top: 10px; }
     </style>
 </head>
@@ -70,12 +73,34 @@
         <div class="status-item"><div class="status-label">點位狀態</div><div id="val-marker" class="status-value">偵測中</div></div>
     </div>
 
+    <div id="step-next-alert" class="overlay" style="display:none;">
+        <div class="modal">
+            <h2 id="next-title">檢測完成</h2>
+            <p id="next-msg" style="color:#ccc;"></p>
+            <button id="next-btn" style="background:#0f0; color:#000;"></button>
+        </div>
+    </div>
+
     <div id="dynamic-risk-ui"></div>
     <div id="countdown-display" class="countdown">5</div>
+    
+    <div class="guide-line top-line"><div class="red-dot"></div><span class="guide-text" style="margin-top: 35px; color:#fff; font-size:12px;">頭頂請對齊紅點</span></div>
+    <div class="guide-line bottom-line"></div>
 
     <div class="container">
         <video id="input_video" playsinline></video>
         <canvas id="output_canvas"></canvas>
+    </div>
+
+    <canvas id="report-gen-canvas" width="800" height="1200" style="display:none;"></canvas>
+
+    <div id="report-preview-layer" class="overlay" style="display:none;">
+        <div class="modal">
+            <h2 style="color:#0f0">個案檢測報告</h2>
+            <div id="report-img-container"></div>
+            <button onclick="shareReport()" style="background:#0f0; color:#000;">儲存 / 分享報告圖</button>
+            <button onclick="location.reload()" style="background:#444; color:white;">完成</button>
+        </div>
     </div>
 
     <script type="module">
@@ -86,30 +111,20 @@
         
         let currentMode = 'IDLE', isStable = false, stabilityCounter = 0, lastAngle = 0;
         let devicePitch = 90, smaBuffer = [], rotBuffer = [];
-        let reportData = { name: "", id: "", height: 170, date: "" };
+        let reportData = { name: "", id: "", height: 170, date: "", frontal: null, lateral: null }, finalBlob = null;
 
-        // --- 核心運算：v5.7 臨床投影運算法 ---
         function calculateClinicalAngle(p1, p2, mode) {
             const aspect = 1280 / 720;
             const pitchRad = (devicePitch - 90) * Math.PI / 180;
-
-            // 1. 旋轉補償 (手機俯仰)
             const y1_c = p1.y * Math.cos(pitchRad) - p1.z * Math.sin(pitchRad);
             const y2_c = p2.y * Math.cos(pitchRad) - p2.z * Math.sin(pitchRad);
-
-            // 2. 座標正規化 (以高度為基準 1.0)
             const dx = (p1.x - p2.x) * aspect;
             const dy = y1_c - y2_c;
-            const dz = (p1.z - p2.z); // Z 的權重需根據經驗微調，MediaPipe Z 約與 X 比例相當
-
+            const dz = (p1.z - p2.z);
             let angle = 0;
             if (mode === 'FRONTAL') {
-                // 正面模式：計算冠狀面投影夾角 (dx vs dy)，並用 dz 進行深度微調
-                // 使用 atan2(對邊, 鄰邊) 比 acos 穩定得多
                 angle = Math.atan2(Math.abs(dx), Math.abs(dy)) * 180 / Math.PI;
             } else {
-                // 側面模式：計算矢狀面投影夾角 (dz vs dy)，此時 X 軸旋轉會被補償
-                // 當側面時，個案的「前傾位移」實際上反映在 MediaPipe 的深度 dz 上
                 angle = Math.atan2(Math.abs(dz), Math.abs(dy)) * 180 / Math.PI;
             }
             return angle;
@@ -135,6 +150,7 @@
                     btnStart.disabled = true; btnStart.className = "btn-start-inactive";
                 }
             });
+            document.getElementById('btn-sensor').innerText = "✅ 授權完成";
         }
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`});
@@ -155,7 +171,6 @@
                 const isShouldersInFrame = checkIn(lms[11]) && checkIn(lms[12]);
                 document.getElementById('val-marker').innerText = isShouldersInFrame ? "✅ 正常" : "❌ 遺失";
 
-                // 旋轉偵測
                 const shoulderWidth = Math.abs(lms[11].x - lms[12].x);
                 const rawRot = Math.abs(lms[11].z - lms[12].z);
                 const isRotating = rawRot > (shoulderWidth * 0.3);
@@ -183,7 +198,7 @@
                 if (isShouldersInFrame && !isStable) {
                     if (Math.abs(avgAngle - lastAngle) < 0.6) {
                         stabilityCounter++;
-                        if (stabilityCounter >= 45) { isStable = true; startCountdown(); }
+                        if (stabilityCounter >= 45) { isStable = true; startCountdown(avgAngle, riskL); }
                     } else { stabilityCounter = 0; }
                 }
                 lastAngle = avgAngle;
@@ -194,7 +209,10 @@
 
         window.startFlow = () => {
             reportData.name = document.getElementById('patient-name').value;
+            reportData.id = document.getElementById('patient-id').value;
             reportData.height = document.getElementById('patient-height').value;
+            const now = new Date();
+            reportData.date = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
             document.getElementById('step-prepare').style.display = 'none';
             document.getElementById('status-monitor').style.display = 'flex';
             currentMode = 'FRONTAL';
@@ -202,14 +220,89 @@
             camera.start();
         };
 
-        function startCountdown() {
+        function startCountdown(angle, risk) {
             const cd = document.getElementById('countdown-display');
             cd.style.display = 'block';
             let timer = 5; cd.innerText = timer;
             let itv = setInterval(() => {
                 timer--; cd.innerText = timer;
-                if (timer <= 0) { clearInterval(itv); cd.style.display = 'none'; alert("數據鎖定成功，請擷取螢幕。"); }
+                if (timer <= 0) { clearInterval(itv); cd.style.display = 'none'; captureStep(angle, risk); }
             }, 1000);
+        }
+
+        function captureStep(angle, risk) {
+            const snapshot = canvasElement.toDataURL("image/jpeg", 0.9);
+            if (currentMode === 'FRONTAL') {
+                reportData.frontal = { img: snapshot, angle: angle.toFixed(1), risk: risk };
+                currentMode = 'IDLE';
+                showModal("正面完成", "請引導個案轉向「側面」。", "進入側面檢測", () => {
+                    document.getElementById('step-next-alert').style.display = 'none';
+                    currentMode = 'LATERAL'; stabilityCounter = 0; isStable = false; smaBuffer = [];
+                });
+            } else {
+                reportData.lateral = { img: snapshot, angle: angle.toFixed(1), risk: risk };
+                currentMode = 'IDLE'; generateReport();
+            }
+        }
+
+        async function generateReport() {
+            const c = document.getElementById('report-gen-canvas');
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = "white"; ctx.fillRect(0,0,800,1200);
+            ctx.fillStyle = "#004d40"; ctx.fillRect(0,0,800,110);
+            ctx.fillStyle = "white"; ctx.font = "bold 38px sans-serif"; ctx.textAlign = "center";
+            ctx.fillText("康富物理治療體態檢測報告", 400, 70);
+            ctx.textAlign = "left"; ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
+            ctx.fillText(`個案: ${reportData.name} (${reportData.height}cm)`, 40, 160);
+            ctx.fillText(`日期: ${reportData.date} / 序號: ${reportData.id}`, 450, 160);
+            
+            const loadImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = src; });
+            const drawBoxedImage = (img, x, y, w, h) => {
+                const imgAspect = img.width / img.height;
+                let drawW = w, drawH = w / imgAspect;
+                if (drawH > h) { drawH = h; drawW = h * imgAspect; }
+                const offsetX = x + (w - drawW) / 2;
+                const offsetY = y + (h - drawH) / 2;
+                ctx.strokeStyle = "#444"; ctx.lineWidth = 2; ctx.strokeRect(offsetX-2, offsetY-2, drawW+4, drawH+4);
+                ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+            };
+
+            const imgF = await loadImg(reportData.frontal.img);
+            drawBoxedImage(imgF, 40, 210, 340, 480);
+            ctx.fillStyle = "#004d40"; ctx.font = "bold 22px sans-serif"; ctx.fillText("【正面：3D頸肩夾角】", 40, 730);
+            ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
+            ctx.fillText(`量測角度: ${reportData.frontal.angle}° (${reportData.frontal.risk}風險)`, 40, 775);
+
+            const imgL = await loadImg(reportData.lateral.img);
+            drawBoxedImage(imgL, 420, 210, 340, 480);
+            ctx.fillStyle = "#004d40"; ctx.font = "bold 22px sans-serif"; ctx.fillText("【側面：3D頸胸夾角】", 420, 730);
+            ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
+            ctx.fillText(`量測角度: ${reportData.lateral.angle}° (${reportData.lateral.risk}風險)`, 420, 775);
+            
+            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif"; ctx.fillText("本檢測由 KPM 5.8 全流程空間座標版生成。", 40, 1160);
+
+            const finalDataUrl = c.toDataURL("image/jpeg", 0.9);
+            const reportImg = new Image(); reportImg.src = finalDataUrl;
+            document.getElementById('report-img-container').innerHTML = '';
+            document.getElementById('report-img-container').appendChild(reportImg);
+            document.getElementById('report-preview-layer').style.display = 'flex';
+            const res = await fetch(finalDataUrl); finalBlob = await res.blob();
+        }
+
+        window.shareReport = async () => {
+            const fileName = `${reportData.date}-${reportData.name}.jpg`;
+            const file = new File([finalBlob], fileName, { type: 'image/jpeg' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: '體態檢測報告' });
+            } else { alert("長按圖片儲存。"); }
+        };
+
+        function showModal(t, m, b, a) {
+            document.getElementById('next-title').innerText = t;
+            document.getElementById('next-msg').innerText = m;
+            const btn = document.getElementById('next-btn');
+            btn.innerText = b; btn.onclick = a;
+            document.getElementById('step-next-alert').style.display = 'flex';
         }
     </script>
 </body>

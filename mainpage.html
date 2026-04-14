@@ -29,7 +29,9 @@
         .modal { background: #1a1a1a; border: 2px solid #0f0; border-radius: 24px; padding: 25px; max-width: 500px; width: 95%; }
         button { background: #0f0; color: #000; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 50px; cursor: pointer; margin: 10px; transition: 0.3s; }
         .btn-inactive { background: #444; color: #888; cursor: not-allowed; }
-        input { background: #333; border: 1px solid #0f0; color: #fff; padding: 12px; border-radius: 8px; font-size: 18px; width: 85%; margin: 10px 0; text-align: center; }
+        
+        /* 調整輸入框樣式與字體大小，確保 placeholder 完整顯示 */
+        input { background: #333; border: 1px solid #0f0; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; width: 100%; box-sizing: border-box; margin: 10px 0; text-align: center; }
         
         #leveler-box { margin: 15px 0; padding: 12px; border: 1px solid #444; border-radius: 15px; background: #000; }
         #dynamic-risk-ui { position: absolute; bottom: 18%; width: 100%; text-align: center; color: #ff5555; font-size: 18px; font-weight: bold; z-index: 310; text-shadow: 2px 2px 4px #000; pointer-events: none; }
@@ -53,10 +55,11 @@
         <div class="modal">
             <h2 style="color:#0f0">康富物理治療體態檢測系統</h2>
             <p style="color:#ccc">個案資訊登錄</p>
-            <input type="text" id="patient-name" placeholder="個案姓名" value="蔡忠憲">
-            <div style="display:flex; justify-content: center; gap: 10px;">
-                <input type="text" id="patient-id" placeholder="序號" value="001" style="width:35%;">
-                <input type="number" id="patient-height" placeholder="身高(cm)" value="170" style="width:45%;">
+            
+            <input type="text" id="patient-name" placeholder="請輸入姓名" value="">
+            <div style="display:flex; justify-content: space-between; gap: 10px;">
+                <input type="text" id="patient-id" placeholder="請輸入測試序號如001" value="" style="width:48%;">
+                <input type="number" id="patient-height" placeholder="請輸入身高(公分)" value="" style="width:48%;">
             </div>
             
             <div id="leveler-box">
@@ -119,7 +122,7 @@
         
         let currentMode = 'IDLE', isStable = false, stabilityCounter = 0, lastAngle = 0;
         let devicePitch = 90;
-        let smaBuffer = [], reportData = { name: "", id: "", height: 170, date: "", frontal: null, lateral: null }, finalBlob = null;
+        let smaBuffer = [], reportData = { name: "", id: "", height: "", date: "", frontal: null, lateral: null }, finalBlob = null;
 
         function normalizeAngle(angle) {
             while (angle > 180) angle -= 360;
@@ -195,7 +198,6 @@
                 let currentAngle = 0, label = "", modeTitle = "", riskL = "", isRotated = false;
 
                 if (currentMode === 'FRONTAL') {
-                    // 【正面邏輯：保留您確認無誤的 v6.5 版本】
                     const e2 = get3DPoint(lms[2]), e5 = get3DPoint(lms[5]);
                     const s11 = get3DPoint(lms[11]), s12 = get3DPoint(lms[12]);
 
@@ -218,14 +220,12 @@
                     isRotated = Math.abs(s12.z - s11.z) > (shoulderWidth3D * 0.35);
 
                 } else if (currentMode === 'LATERAL') {
-                    // 【側面邏輯：保留 v6.5 完美數值計算，分離方向判定】
                     const sideIdx = lms[11].visibility > lms[12].visibility ? 11 : 12;
                     const earIdx = sideIdx === 11 ? 7 : 8;
                     
                     const sh = get3DPoint(lms[sideIdx]);
                     const ear = get3DPoint(lms[earIdx]);
                     
-                    // 1. 數值計算：法向量投影法 (產出 24.7°, 19.5° 完美數據的核心)
                     const s11 = get3DPoint(lms[11]), s12 = get3DPoint(lms[12]);
                     const sx = s11.x - s12.x;
                     const sz = s11.z - s12.z;
@@ -241,20 +241,19 @@
                     const forward_dist = nx * fx + nz * fz;
                     currentAngle = Math.atan2(forward_dist, Math.abs(ny)) * 180 / Math.PI;
                     
-                    const absA = Math.abs(currentAngle); // 取絕對值保證數值穩定
+                    const absA = Math.abs(currentAngle); 
 
-                    // 2. 獨立方向判讀：改用螢幕絕對 X 軸座標比對，免疫 3D 翻轉干擾
                     const nose_x = lms[0].x;
                     const ear_x = lms[earIdx].x;
                     const sh_x = lms[sideIdx].x;
 
-                    const isFacingLeft = nose_x < ear_x; // 鼻子在耳朵左邊，代表面向左
+                    const isFacingLeft = nose_x < ear_x; 
                     let isForward = false;
 
                     if (isFacingLeft) {
-                        isForward = ear_x < sh_x; // 面向左時，耳朵在肩膀左邊即為前傾
+                        isForward = ear_x < sh_x; 
                     } else {
-                        isForward = ear_x > sh_x; // 面向右時，耳朵在肩膀右邊即為前傾
+                        isForward = ear_x > sh_x; 
                     }
 
                     if (absA > 2) {
@@ -293,9 +292,9 @@
         });
 
         window.startFlow = async () => {
-            reportData.name = document.getElementById('patient-name').value;
-            reportData.id = document.getElementById('patient-id').value;
-            reportData.height = document.getElementById('patient-height').value;
+            reportData.name = document.getElementById('patient-name').value || "未命名個案";
+            reportData.id = document.getElementById('patient-id').value || "N/A";
+            reportData.height = document.getElementById('patient-height').value; 
             const now = new Date();
             reportData.date = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
             document.getElementById('step-prepare').style.display = 'none';
@@ -347,7 +346,9 @@
             ctx.fillStyle = "white"; ctx.font = "bold 38px sans-serif"; ctx.textAlign = "center";
             ctx.fillText("康富物理治療體態檢測報告", 400, 70); 
             ctx.textAlign = "left"; ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
-            ctx.fillText(`個案: ${reportData.name} (${reportData.height}cm)`, 40, 160);
+            
+            const heightText = reportData.height ? ` (${reportData.height}cm)` : "";
+            ctx.fillText(`個案: ${reportData.name}${heightText}`, 40, 160);
             ctx.fillText(`日期: ${reportData.date} / 序號: ${reportData.id}`, 450, 160);
             
             const loadImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = src; });
@@ -375,7 +376,7 @@
             ctx.fillText(`姿態判讀: ${reportData.lateral.label}`, 420, 765);
             ctx.fillText(`量測角度: ${reportData.lateral.angle}° (${reportData.lateral.risk})`, 420, 800);
             
-            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif"; ctx.fillText("康富物理治療體系 版權所有。(KPM v6.6 雙擎校正版)", 40, 1160);
+            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif"; ctx.fillText("康富物理治療體系 版權所有。(KPM v6.7 臨床正式版)", 40, 1160);
 
             const finalDataUrl = c.toDataURL("image/jpeg", 0.9);
             const reportImg = new Image(); reportImg.src = finalDataUrl;

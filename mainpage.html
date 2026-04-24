@@ -30,7 +30,6 @@
         button { background: #0f0; color: #000; border: none; padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 50px; cursor: pointer; margin: 10px; transition: 0.3s; }
         .btn-inactive { background: #444; color: #888; cursor: not-allowed; }
         
-        /* 確保 placeholder 完整顯示的表單配置 */
         input { background: #333; border: 1px solid #0f0; color: #fff; padding: 12px; border-radius: 8px; font-size: 16px; width: 100%; box-sizing: border-box; margin: 10px 0; text-align: center; }
         
         #leveler-box { margin: 15px 0; padding: 12px; border: 1px solid #444; border-radius: 15px; background: #000; }
@@ -122,7 +121,6 @@
         let devicePitch = 90;
         let smaBuffer = [], reportData = { name: "", id: "", height: "", date: "", frontal: null, lateral: null }, finalBlob = null;
         
-        // 全域變數：確保快門按下時擷取最即時的資料，與中斷防呆機制
         let countdownInterval = null;
         let lockedAngle = 0;
         let liveAngle = 0, liveLabel = "", liveRisk = "";
@@ -139,7 +137,6 @@
             const px = p.x * cw;
             const py = p.y * ch;
             const pz = p.z * cw; 
-            
             const pitchRad = (devicePitch - 90) * Math.PI / 180;
             return {
                 x: px,
@@ -202,76 +199,42 @@
                 if (currentMode === 'FRONTAL') {
                     const e2 = get3DPoint(lms[2]), e5 = get3DPoint(lms[5]);
                     const s11 = get3DPoint(lms[11]), s12 = get3DPoint(lms[12]);
-
                     const headRad = Math.atan2(e5.y - e2.y, e5.x - e2.x);
                     const shRad = Math.atan2(s12.y - s11.y, s12.x - s11.x);
                     currentAngle = normalizeAngle((headRad - shRad) * 180 / Math.PI);
-                    
                     const shoulderMidX = (lms[11].x + lms[12].x) / 2;
                     const absA = Math.abs(currentAngle);
                     if (absA > 1.5) {
                         label = lms[0].x < shoulderMidX ? "右偏 (R)" : "左偏 (L)";
-                    } else {
-                        label = "中立";
-                    }
+                    } else { label = "中立"; }
                     modeTitle = "頸肩";
-                    
                     if (absA >= 7.5) riskL = "風險 高"; else if (absA >= 5) riskL = "風險 中"; else riskL = "風險 低";
-
                     const shoulderWidth3D = Math.sqrt((s12.x - s11.x)**2 + (s12.z - s11.z)**2);
                     isRotated = Math.abs(s12.z - s11.z) > (shoulderWidth3D * 0.35);
 
                 } else if (currentMode === 'LATERAL') {
                     const sideIdx = lms[11].visibility > lms[12].visibility ? 11 : 12;
                     const earIdx = sideIdx === 11 ? 7 : 8;
-                    
-                    const sh = get3DPoint(lms[sideIdx]);
-                    const ear = get3DPoint(lms[earIdx]);
-                    
+                    const sh = get3DPoint(lms[sideIdx]), ear = get3DPoint(lms[earIdx]);
                     const s11 = get3DPoint(lms[11]), s12 = get3DPoint(lms[12]);
-                    const sx = s11.x - s12.x;
-                    const sz = s11.z - s12.z;
-                    
+                    const sx = s11.x - s12.x, sz = s11.z - s12.z;
                     let fx = -sz, fz = sx;
                     const flen = Math.sqrt(fx*fx + fz*fz);
                     if (flen > 0) { fx /= flen; fz /= flen; } else { fx = 1; fz = 0; }
-
-                    const nx = ear.x - sh.x;
-                    const ny = ear.y - sh.y;
-                    const nz = ear.z - sh.z;
-
+                    const nx = ear.x - sh.x, ny = ear.y - sh.y, nz = ear.z - sh.z;
                     const forward_dist = nx * fx + nz * fz;
                     currentAngle = Math.atan2(forward_dist, Math.abs(ny)) * 180 / Math.PI;
-                    
                     const absA = Math.abs(currentAngle); 
-
-                    const nose_x = lms[0].x;
-                    const ear_x = lms[earIdx].x;
-                    const sh_x = lms[sideIdx].x;
-
+                    const nose_x = lms[0].x, ear_x = lms[earIdx].x, sh_x = lms[sideIdx].x;
                     const isFacingLeft = nose_x < ear_x; 
-                    let isForward = false;
-
-                    if (isFacingLeft) {
-                        isForward = ear_x < sh_x; 
-                    } else {
-                        isForward = ear_x > sh_x; 
-                    }
-
-                    if (absA > 2) {
-                        label = isForward ? "前傾 (Fwd)" : "後傾 (Bwd)";
-                    } else {
-                        label = "中立";
-                    }
-                    
+                    let isForward = isFacingLeft ? (ear_x < sh_x) : (ear_x > sh_x);
+                    if (absA > 2) { label = isForward ? "前傾 (Fwd)" : "後傾 (Bwd)"; } else { label = "中立"; }
                     modeTitle = "頸胸";
                     if (absA >= 15) riskL = "風險 高"; else if (absA >= 5) riskL = "風險 中"; else riskL = "風險 低";
-
                     isRotated = Math.abs(lms[11].x - lms[12].x) > 0.2; 
                 }
 
                 document.getElementById('rot-warning').style.display = isRotated ? 'block' : 'none';
-
                 smaBuffer.push(currentAngle);
                 if(smaBuffer.length > 25) smaBuffer.shift(); 
                 const avgAngle = smaBuffer.reduce((a, b) => a + b, 0) / smaBuffer.length;
@@ -281,51 +244,35 @@
                 document.getElementById('val-label').innerText = label;
                 document.getElementById('dynamic-risk-ui').innerText = riskL;
 
-                // 隨時更新「即時變數」，確保快門按下時擷取的是精準的最後一刻
-                liveAngle = avgAngle;
-                liveLabel = label;
-                liveRisk = riskL;
+                liveAngle = avgAngle; liveLabel = label; liveRisk = riskL;
 
-                // --- 穩定度與防飄移核心邏輯 ---
                 if (isShouldersInFrame) {
                     const angleDiff = Math.abs(avgAngle - lastAngle);
-                    
                     if (!isStable) {
-                        // 1. 更嚴謹的進入倒數門檻 (縮小震幅限制)
                         const enterThreshold = currentMode === 'FRONTAL' ? 0.3 : 0.8;
                         if (angleDiff < enterThreshold) {
                             stabilityCounter++;
                             if (stabilityCounter >= 40) { 
-                                isStable = true; 
-                                lockedAngle = avgAngle; // 鎖定啟動時的基準角度
-                                startCountdown(); 
+                                isStable = true; lockedAngle = avgAngle; startCountdown(); 
                             }
-                        } else { 
-                            stabilityCounter = 0; 
-                        }
+                        } else { stabilityCounter = 0; }
                     } else {
-                        // 2. 倒數期間的移動偵測 (Anti-Drift 取消機制)
                         const drift = Math.abs(avgAngle - lockedAngle);
                         const cancelThreshold = currentMode === 'FRONTAL' ? 1.5 : 3.0;
                         if (drift > cancelThreshold) {
-                            // 若飄移過大，立即中斷倒數重新來過
                             clearInterval(countdownInterval);
                             document.getElementById('countdown-display').style.display = 'none';
-                            isStable = false;
-                            stabilityCounter = 0;
+                            isStable = false; stabilityCounter = 0;
                         }
                     }
                 } else {
-                    // 若倒數期間點位遺失，立刻中斷
-                    if (isStable) {
-                        clearInterval(countdownInterval);
-                        document.getElementById('countdown-display').style.display = 'none';
-                        isStable = false;
-                    }
+                    if (isStable) { clearInterval(countdownInterval); document.getElementById('countdown-display').style.display = 'none'; isStable = false; }
                     stabilityCounter = 0; 
                 }
                 lastAngle = avgAngle;
-                drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+
+                // --- 修正重點：骨架線條顏色與粗細 (v6.9) ---
+                drawConnectors(canvasCtx, lms, POSE_CONNECTIONS, {color: '#FF0000', lineWidth: 5});
             }
             canvasCtx.restore();
         });
@@ -349,12 +296,7 @@
             let timer = 5; cd.innerText = timer;
             countdownInterval = setInterval(() => {
                 timer--; cd.innerText = timer;
-                if (timer <= 0) { 
-                    clearInterval(countdownInterval); 
-                    cd.style.display = 'none'; 
-                    // 傳入 T=0 秒 (快門按下瞬間) 的即時資料
-                    captureStep(liveAngle, liveLabel, liveRisk); 
-                }
+                if (timer <= 0) { clearInterval(countdownInterval); cd.style.display = 'none'; captureStep(liveAngle, liveLabel, liveRisk); }
             }, 1000);
         }
 
@@ -364,7 +306,6 @@
             if (currentMode === 'FRONTAL') {
                 reportData.frontal = { img: snapshot, angle: absA.toFixed(1), label: label, risk: risk };
                 currentMode = 'IDLE';
-                
                 document.getElementById('next-title').innerText = "正面完成";
                 document.getElementById('next-msg').innerText = "請引導個案轉向「側面」。";
                 const btn = document.getElementById('next-btn');
@@ -386,15 +327,12 @@
             const ctx = c.getContext('2d');
             ctx.fillStyle = "white"; ctx.fillRect(0,0,800,1200);
             ctx.fillStyle = "#004d40"; ctx.fillRect(0,0,800,110);
-            
             ctx.fillStyle = "white"; ctx.font = "bold 38px sans-serif"; ctx.textAlign = "center";
             ctx.fillText("康富物理治療體態檢測報告", 400, 70); 
             ctx.textAlign = "left"; ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
-            
             const heightText = reportData.height ? ` (${reportData.height}cm)` : "";
             ctx.fillText(`個案: ${reportData.name}${heightText}`, 40, 160);
             ctx.fillText(`日期: ${reportData.date} / 序號: ${reportData.id}`, 450, 160);
-            
             const loadImg = (src) => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = src; });
             const drawBoxedImage = (img, x, y, w, h) => {
                 const imgAspect = img.width / img.height;
@@ -405,23 +343,19 @@
                 ctx.strokeStyle = "#444"; ctx.lineWidth = 2; ctx.strokeRect(offsetX-2, offsetY-2, drawW+4, drawH+4);
                 ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
             };
-
             const imgF = await loadImg(reportData.frontal.img);
             drawBoxedImage(imgF, 40, 210, 340, 480);
             ctx.fillStyle = "#004d40"; ctx.font = "bold 22px sans-serif"; ctx.fillText("【正面：頸肩夾角】", 40, 730);
             ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
             ctx.fillText(`偏移狀態: ${reportData.frontal.label}`, 40, 765);
             ctx.fillText(`量測角度: ${reportData.frontal.angle}° (${reportData.frontal.risk})`, 40, 800);
-
             const imgL = await loadImg(reportData.lateral.img);
             drawBoxedImage(imgL, 420, 210, 340, 480);
             ctx.fillStyle = "#004d40"; ctx.font = "bold 22px sans-serif"; ctx.fillText("【側面：頸胸夾角】", 420, 730);
             ctx.fillStyle = "#333"; ctx.font = "22px sans-serif";
             ctx.fillText(`姿態判讀: ${reportData.lateral.label}`, 420, 765);
             ctx.fillText(`量測角度: ${reportData.lateral.angle}° (${reportData.lateral.risk})`, 420, 800);
-            
-            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif"; ctx.fillText("康富物理治療體系 版權所有。(v6.8 防飄移同步版)", 40, 1160);
-
+            ctx.fillStyle = "#aaa"; ctx.font = "italic 16px sans-serif"; ctx.fillText("康富物理治療體系 版權所有。(KPM v6.9 骨架強化對比版)", 40, 1160);
             const finalDataUrl = c.toDataURL("image/jpeg", 0.9);
             const reportImg = new Image(); reportImg.src = finalDataUrl;
             document.getElementById('report-img-container').innerHTML = '';
